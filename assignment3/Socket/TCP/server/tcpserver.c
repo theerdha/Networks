@@ -178,19 +178,23 @@ int main(int argc, char **argv) {
          */
         bzero(buf,BUFSIZE);
         MD5_Init(&mdContext);
-        //int i = ceil(size_of_file/((double)BUFSIZE));
-        int i = 63;
-        printf("Receiving file in %d chunks.\n",i );
-        while(i--){
+        int i = ceil(size_of_file/((double)BUFSIZE));
+        int chunks = i;
+        //int i = 63;
+        while(--i){
             n = read(childfd,buf,BUFSIZE); 
             MD5_Update(&mdContext,buf,BUFSIZE);
             if (n < 0) 
                 error("ERROR reading from socket");
             if(n == 0)
                 error("No file chunk received");
-            fputs(buf,fd);
+            //if(n > 0)
+            //    printf("File chunk %d recieved.\n",i+1);
+            fwrite(buf,BUFSIZE,1,fd);
             bzero(buf,BUFSIZE);
         }
+        printf("Received file in %d chunks.\n",chunks );
+        
         fclose(fd);
         /*
          *  Compute MD5checksum 

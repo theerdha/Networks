@@ -56,8 +56,4 @@ KiB Swap:(B[m[39;49m[1m 13421772+(B[m[39;49mtotal,(B[m[39;49m[1m 6670
 (B[m   73 root      rt   0       0      0      0 S   0.0  0.0   0:43.46 watchdog/13                                                                                                                             (B[m[39;49m[K
 (B[m   74 root      rt   0       0      0      0 S   0.0  0.0   1:48.10 migration/13                                                                                                                            (B[m[39;49m[K
 (B[m   75 root      20   0       0      0      0 S   0.0  0.0   0:19.09 ksoftirqd/13                                                                                                                            (B[m[39;49m[K
-(B[m   78 root      rt   0       0      0      0 S   0.0  0.0   0:40.86 watchdog/14                                                                                                                             (B[m[39;49m[K
-(B[m   79 root      rt   0       0      0      0 S   0.0  0.0   1:49.11 migration/14                                                                                                                            (B[m[39;49m[K
-(B[m   80 root      20   0       0      0      0 S   0.0  0.0   0:14.15 ksoftirqd/14                                                                                                                            (B[m[39;49m[K
-(B[m   83 root      rt   0       0      0      0 S   0.0  0.0   0:41.52 watchdog/15                                                                                                                             (B[m[39;49m[K[?1l>[63;1H
-[?12l[?25h[K
+(B[m   78 root      rt   0       0      0      0 S   0.0  0.0   0:40.86 watchdog/14                                                                                                                        
