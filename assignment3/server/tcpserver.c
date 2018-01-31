@@ -163,7 +163,7 @@ int main(int argc, char **argv) {
         if (n < 0) 
             error("ERROR reading from socket");
         //printf("server received %d bytes: %s", n, buf);
-
+        
         /*
          * Parse input for file name and size of file
          */
@@ -181,7 +181,9 @@ int main(int argc, char **argv) {
         int i = ceil(size_of_file/((double)BUFSIZE));
         int chunks = i;
         //int i = 63;
-        while(n = recv(childfd,buf,BUFSIZE,0)){
+        for(int i = 0; i < chunks;i++){
+            n = recv(childfd,buf,BUFSIZE,MSG_WAITALL); 
+            MD5_Update(&mdContext,buf,BUFSIZE);
             if (n < 0) 
                 error("ERROR reading from socket");
             if(n == 0)
@@ -192,18 +194,11 @@ int main(int argc, char **argv) {
             bzero(buf,BUFSIZE);
         }
         printf("Received file in %d chunks.\n",chunks );
+        
+        fclose(fd);
         /*
          *  Compute MD5checksum 
          */
-        while(feof(fd) == 0){
-            fread(buf,BUFSIZE,1,fd);
-            MD5_Update(&mdContext,buf,BUFSIZE);
-            if (n < 0) 
-                error("ERROR writing to socket");
-            bzero(buf,BUFSIZE);
-            i++;
-        }
-        fclose(fd);
         MD5_Final(checksum,&mdContext);
         checksum[MD5_DIGEST_LENGTH] = '\0';
         /* 

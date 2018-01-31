@@ -97,7 +97,8 @@ int main(int argc, char **argv) {
     file = fopen(filename,"r");
     int i = 0;
     bzero(buf,BUFSIZE);
-    while((fread(buf,BUFSIZE,1,file)) > 0){
+    while(feof(file) == 0){
+        fread(buf,BUFSIZE,1,file);
         n = write(sockfd, buf, BUFSIZE);
         MD5_Update(&mdContext,buf,BUFSIZE);
         if (n < 0) 
