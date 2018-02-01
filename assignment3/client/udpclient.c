@@ -14,7 +14,7 @@
 #include <sys/stat.h>
 
 #define BUFSIZE 1024
-
+#define TIMEOUT 5
 /* 
  * error - wrapper for perror
  */
@@ -35,6 +35,17 @@ int strtoint(char* array,int index){
     return ((int)array[index])<<24 + ((int)array[index+1])<<16 + ((int)array[index+2])<<8 + (int)array[index+3];
 }
 
+void reliableUDP(int sockfd, char* buf,struct sockaddr_in serveraddr){
+    n = sendto(sockfd, buf, BUFSIZE,0,(struct sockaddr *)&serveraddr,sizeof(serveraddr));
+    if (n < 0) 
+        error("ERROR writing to socket");
+    
+    bzero(buf,BUFSIZE);
+    n = recvfrom(sockfd, buf, BUFSIZE,0,(struct sockaddr *)&serveraddr,(socklen_t*)sizeof(serveraddr));
+    if (n < 0) 
+        error("ERROR reading from socket");
+}
+
 int main(int argc, char **argv) {
     int sockfd, portno, n;
     struct sockaddr_in serveraddr;
@@ -45,13 +56,14 @@ int main(int argc, char **argv) {
     FILE* file;
     char temp;
     char* size_in_string;
+    char* no_of_chunks_str;
     MD5_CTX mdContext;
     unsigned char checksum[MD5_DIGEST_LENGTH+1];
     char* filename_size;
     struct stat st;
     int length_of_chunk;
     int no_of_chunks;
-
+    struct timeval timeout;
     /* check command line arguments */
     if (argc != 4) {
         fprintf(stderr,"usage: %s <hostname> <port> <filename>\n", argv[0]);
@@ -64,6 +76,7 @@ int main(int argc, char **argv) {
 
     /* socket: create the socket */
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    
     if (sockfd < 0) 
         error("ERROR opening socket");
 
@@ -73,6 +86,8 @@ int main(int argc, char **argv) {
         fprintf(stderr,"ERROR, no such host as %s\n", hostname);
         exit(0);
     }
+    
+    setsockout(sockfd,SOL_SOCKET,SO_RCVTIMEO,(const char*) &timeout,sizeof(timeout));
 
     /* build the server's Internet address */
     bzero((char *) &serveraddr, sizeof(serveraddr));
@@ -94,7 +109,8 @@ int main(int argc, char **argv) {
      * Send file name and size of file
      */
     length_of_chunk = 0;
-    size_in_string = (char*) malloc(1   
+    size_in_string = (char*) malloc(10);
+    no_of_chunks_str = (char*) malloc(10);
     stat(filename,&st);
     bzero(buf,BUFSIZE);
 
@@ -108,24 +124,14 @@ int main(int argc, char **argv) {
     strcat(buf,":");
     strcat(buf, size_in_string);
     strcat(buf,":");
+    sprintf(no_of_chunks_str,"%d",no_of_chunks);
+    strcat(buf, no_of_chunks_str);
     length_of_chunk = strlen(buf);
     int temp = strlen(buf);
-    inttostr(buf,strlen(buf),no_of_chunks);
-    buf[temp+4] = '\0';
     inttostr(buf,4,strlen(buf)-8);
 
-    n = sendto(sockfd, buf, BUFSIZE,0,(struct sockaddr *)&serveraddr,sizeof(serveraddr));
-    if (n < 0) 
-        error("ERROR writing to socket");
+    reliableUDP(sockfd,buf,serveraddr); 
     
-    bzero(buf,BUFSIZE);
-    n = recvfrom(sockfd, buf, BUFSIZE,0,(struct sockaddr *)&serveraddr,(socklen_t*)sizeof(serveraddr));
-    if (n < 0) 
-        error("ERROR reading from socket");
-    
-    /*
-     * Send file 
-     */
     MD5_Init(&mdContext);
     file = fopen(filename,"r");
     int i = 0;
