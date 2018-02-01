@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
     bzero(buf,BUFSIZE);
     strcpy(buf,filename);
     size_in_string = (char*) malloc(10);
-    sprintf(size_in_string,"%d",st.st_size);
+    sprintf(size_in_string,"%d",(int)st.st_size);
     strcat(buf,":");
     strcat(buf, size_in_string);
     n = write(sockfd, buf, BUFSIZE);
