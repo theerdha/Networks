@@ -57,9 +57,73 @@ void error(char *msg) {
     exit(1);
 }
 
+void inttostr(char* array,int index,int value){
+    array[index] = (value >> 24) & 0xFF;
+    array[index+1] = (value>>16) & 0xFF;
+    array[index+2] = (value>>8) & 0xFF;
+    array[index+3] = value & 0xFF;
+    return;
+}
+
+int strtoint(char* array,int index){
+    return ((int)array[index])<<24 + ((int)array[index+1])<<16 + ((int)array[index+2])<<8 + (int)array[index+3];
+}
+
+_Bool checkACK(char* m,char* ack){
+    return (m[0]^ack[0])|(m[1]^ack[1])|(m[2]^ack[2])|(m[3]^ack[3]);
+}
+
+void createACK(char* ack,char* buf){
+    strncpy(ack,buf,4);
+    return;
+}
+
+void sendReliableUDP(int sockfd, char* buf,struct sockaddr_in serveraddr){
+    int n;
+    char recvbuf[BUFSIZE];
+    while(1){
+        n = sendto(sockfd, buf, BUFSIZE,0,(struct sockaddr *)&serveraddr,sizeof(serveraddr));
+        if (n < 0) 
+            error("ERROR writing to socket");
+        bzero(recvbuf,BUFSIZE);
+        n = recvfrom(sockfd, recvbuf, BUFSIZE,0,(struct sockaddr *)&serveraddr,(socklen_t*)sizeof(serveraddr));
+        if (n < 0){ 
+            error("ERROR reading from socket");
+        }
+        else{
+            if(checkACK(buf,recvbuf) == 0)
+                break;
+        }
+    }
+    bzero(buf,BUFSIZE);
+    //strcpy(buf,recvbuf);
+    return;
+}
+
+void recvReliableUDP(int sockfd, char* buf, struct sockaddr_in serveraddr){
+    int n,serverlen = sizeof(serveraddr);
+    char ack[BUFSIZE];
+    n = recvfrom(sockfd,buf,BUFSIZE,0,(struct sockaddr*)&serveraddr,&serverlen);
+    if(n < 0)
+        error("Error reading from the socket");
+
+    createACK(ack,buf);
+    n = sendto(sockfd,ack,BUFSIZE,0,(struct sockaddr*)&serveraddr,serverlen);
+    if(n<0)
+        error("ERROR writing in server");
+}
+    
+
+void setSequenceNumber(char* buf,int index){
+    inttostr(buf,0,index);
+}
+
+void setMessageSize(char* buf,int size){
+    inttostr(buf,4,size);
+}
+
 int main(int argc, char **argv) {
-    int parentfd; /* parent socket */
-    int childfd; /* child socket */
+    int sockfd; /* socket */
     int portno; /* port to listen on */
     int clientlen; /* byte size of client's address */
     struct sockaddr_in serveraddr; /* server's addr */
@@ -88,8 +152,8 @@ int main(int argc, char **argv) {
     /* 
      * socket: create the parent socket 
      */
-    parentfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (parentfd < 0) 
+    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd < 0) 
         error("ERROR opening socket");
 
     /* setsockopt: Handy debugging trick that lets 
@@ -98,7 +162,7 @@ int main(int argc, char **argv) {
      * Eliminates "ERROR on binding: Address already in use" error. 
      */
     optval = 1;
-    setsockopt(parentfd, SOL_SOCKET, SO_REUSEADDR, 
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, 
             (const void *)&optval , sizeof(int));
 
     /*
@@ -118,48 +182,17 @@ int main(int argc, char **argv) {
     /* 
      * bind: associate the parent socket with a port 
      */
-    if (bind(parentfd, (struct sockaddr *) &serveraddr, 
+    if (bind(sockfd, (struct sockaddr *) &serveraddr, 
                 sizeof(serveraddr)) < 0) 
         error("ERROR on binding");
 
-    /* 
-     * listen: make this socket ready to accept connection requests 
-     */
-    if (listen(parentfd, 5) < 0) /* allow 5 requests to queue up */ 
-        error("ERROR on listen");
     printf("Server Running ....\n");
-    /* 
-     * main loop: wait for a connection request, echo input line, 
-     * then close connection.
-     */
-    clientlen = sizeof(clientaddr);
     while (1) {
-
-        /* 
-         * accept: wait for a connection request 
-         */
-        childfd = accept(parentfd, (struct sockaddr *) &clientaddr, &clientlen);
-        if (childfd < 0) 
-            error("ERROR on accept");
-
-        /* 
-         * gethostbyaddr: determine who sent the message 
-         */
-        hostp = gethostbyaddr((const char *)&clientaddr.sin_addr.s_addr, 
-                sizeof(clientaddr.sin_addr.s_addr), AF_INET);
-        if (hostp == NULL)
-            error("ERROR on gethostbyaddr");
-        hostaddrp = inet_ntoa(clientaddr.sin_addr);
-        if (hostaddrp == NULL)
-            error("ERROR on inet_ntoa\n");
-        printf("server established connection with %s (%s)\n", 
-                hostp->h_name, hostaddrp);
-
         /* 
          * read: read input string from the client
          */
         bzero(buf, BUFSIZE);
-        n = read(childfd, buf, BUFSIZE);
+        n = recvfrom(sockfd, buf, BUFSIZE,0,(struct sockaddr*) &clientaddr,(socklen_t*)&clientlen);
         if (n < 0) 
             error("ERROR reading from socket");
         //printf("server received %d bytes: %s", n, buf);
@@ -182,7 +215,7 @@ int main(int argc, char **argv) {
         int chunks = i;
         //int i = 63;
         while(--i){
-            n = read(childfd,buf,BUFSIZE); 
+            n = read(sockfd,buf,BUFSIZE); 
             MD5_Update(&mdContext,buf,BUFSIZE);
             if (n < 0) 
                 error("ERROR reading from socket");
@@ -204,10 +237,10 @@ int main(int argc, char **argv) {
         /* 
          * write: echo the input string back to the client 
          */
-        n = write(childfd, checksum, MD5_DIGEST_LENGTH+1);
+        n = write(sockfd, checksum, MD5_DIGEST_LENGTH+1);
         if (n < 0) 
             error("ERROR writing to socket");
 
-        close(childfd);
+        close(sockfd);
     }
 }
