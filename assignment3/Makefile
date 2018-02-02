@@ -1,4 +1,4 @@
-binaries: tcp 
+binaries: tcp udp 
 	@echo "Binaries generated in their respective folders."
 tcp: tcpserver tcpclient
 
