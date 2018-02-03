@@ -120,7 +120,7 @@ int main(int argc, char **argv) {
     while(feof(file) == 0){
         fread(buf+8,BUFSIZE-8,1,file);
 
-        MD5_Update(&mdContext,buf,BUFSIZE);
+        MD5_Update(&mdContext,buf+8,BUFSIZE-8);
         
         setSequenceNumber(buf,&seq);
         setMessageSize(buf,strlen(buf));
@@ -138,10 +138,7 @@ int main(int argc, char **argv) {
     /* print the server's reply */
     bzero(buf, BUFSIZE);
     recvReliableUDP(sockfd,buf,&serveraddr);
-
-    if (n < 0) 
-        error("ERROR reading from socket");
-    //printf("%s, %s\n",buf,checksum)
+    printf("%s, %s\n",buf,checksum);
     if(strcmp(buf,checksum) == 0)
         printf("Check sum matched\n.");
     else

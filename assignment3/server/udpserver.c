@@ -169,7 +169,7 @@ int main(int argc, char **argv) {
             if(seqbuffer[seq] == 0)
                 i++;
             seqbuffer[seq] = 1;
-            MD5_Update(&mdContext,buf+8,BUFSIZE);
+            MD5_Update(&mdContext,buf+8,BUFSIZE-8);
             fwrite(buf+8,BUFSIZE-8,1,fd);
             bzero(buf,BUFSIZE);
         }
@@ -181,10 +181,12 @@ int main(int argc, char **argv) {
          */
         MD5_Final(checksum,&mdContext);
         checksum[MD5_DIGEST_LENGTH] = '\0';
+        printf("%s\n",checksum);
         /* 
          * write: echo the input string back to the client 
          */
-        sendReliableUDP(sockfd,checksum, clientaddr);
+        strcpy(buf,checksum);
+        sendReliableUDP(sockfd,buf, clientaddr);
         close(sockfd);
     }
 }
