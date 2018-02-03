@@ -16,7 +16,7 @@
 #include <math.h>
 
 #define BUFSIZE 1024
-
+#define TIMEOUT 10
 #if 0
 /* 
  * Structs exported from in.h
@@ -81,6 +81,7 @@ int main(int argc, char **argv) {
     unsigned char checksum[MD5_DIGEST_LENGTH+1]; /* MD5 checksum */
     FILE* fd;
     int* seqbuffer;
+    struct timeval timeout;
     //vector<int> seqRecv;
     /* 
      * check command line arguments 
@@ -103,9 +104,10 @@ int main(int argc, char **argv) {
      * otherwise we have to wait about 20 secs. 
      * Eliminates "ERROR on binding: Address already in use" error. 
      */
-    optval = 1;
-    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, 
-            (const void *)&optval , sizeof(int));
+    timeout.tv_sec = TIMEOUT;
+    timeout.tv_usec = 0;
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO|SO_REUSEADDR, 
+            (const char *)&timeout , sizeof(timeout));
 
     /*
      * build the server's Internet address
