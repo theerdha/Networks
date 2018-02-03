@@ -57,70 +57,7 @@ void error(char *msg) {
     exit(1);
 }
 
-void inttostr(char* array,int index,int value){
-    array[index] = (value >> 24) & 0xFF;
-    array[index+1] = (value>>16) & 0xFF;
-    array[index+2] = (value>>8) & 0xFF;
-    array[index+3] = value & 0xFF;
-    return;
-}
-
-int strtoint(char* array,int index){
-    return ((int)array[index])<<24 + ((int)array[index+1])<<16 + ((int)array[index+2])<<8 + (int)array[index+3];
-}
-
-_Bool checkACK(char* m,char* ack){
-    return (m[0]^ack[0])|(m[1]^ack[1])|(m[2]^ack[2])|(m[3]^ack[3]);
-}
-
-void createACK(char* ack,char* buf){
-    strncpy(ack,buf,4);
-    return;
-}
-
-void sendReliableUDP(int sockfd, char* buf,struct sockaddr_in serveraddr){
-    int n;
-    char recvbuf[BUFSIZE];
-    while(1){
-        n = sendto(sockfd, buf, BUFSIZE,0,(struct sockaddr *)&serveraddr,sizeof(serveraddr));
-        if (n < 0) 
-            error("ERROR writing to socket");
-        bzero(recvbuf,BUFSIZE);
-        n = recvfrom(sockfd, recvbuf, BUFSIZE,0,(struct sockaddr *)&serveraddr,(socklen_t*)sizeof(serveraddr));
-        if (n < 0){ 
-            error("ERROR reading from socket");
-        }
-        else{
-            if(checkACK(buf,recvbuf) == 0)
-                break;
-        }
-    }
-    bzero(buf,BUFSIZE);
-    //strcpy(buf,recvbuf);
-    return;
-}
-
-void recvReliableUDP(int sockfd, char* buf, struct sockaddr_in serveraddr){
-    int n,serverlen = sizeof(serveraddr);
-    char ack[BUFSIZE];
-    n = recvfrom(sockfd,buf,BUFSIZE,0,(struct sockaddr*)&serveraddr,&serverlen);
-    if(n < 0)
-        error("Error reading from the socket");
-
-    createACK(ack,buf);
-    n = sendto(sockfd,ack,BUFSIZE,0,(struct sockaddr*)&serveraddr,serverlen);
-    if(n<0)
-        error("ERROR writing in server");
-}
-    
-
-void setSequenceNumber(char* buf,int index){
-    inttostr(buf,0,index);
-}
-
-void setMessageSize(char* buf,int size){
-    inttostr(buf,4,size);
-}
+#include "../udpreliable.h"
 
 int main(int argc, char **argv) {
     int sockfd; /* socket */
@@ -135,11 +72,16 @@ int main(int argc, char **argv) {
     int n; /* message byte size */
     char* filename; /* file name*/
     char* size_in_string; /* size of file in string*/
+    char* no_of_packets_str;
+    int no_of_packets;
+    int seq;
     int size_of_file; /* size of file integer */
     char* file; /* file data */
     MD5_CTX mdContext; /* MD5 context data */
     unsigned char checksum[MD5_DIGEST_LENGTH+1]; /* MD5 checksum */
     FILE* fd;
+    int* seqbuffer;
+    //vector<int> seqRecv;
     /* 
      * check command line arguments 
      */
@@ -192,18 +134,25 @@ int main(int argc, char **argv) {
          * read: read input string from the client
          */
         bzero(buf, BUFSIZE);
-        n = recvfrom(sockfd, buf, BUFSIZE,0,(struct sockaddr*) &clientaddr,(socklen_t*)&clientlen);
-        if (n < 0) 
-            error("ERROR reading from socket");
+        recvReliableUDP(sockfd,buf,&clientaddr);
         //printf("server received %d bytes: %s", n, buf);
         
         /*
          * Parse input for file name and size of file
          */
-        filename = strtok(buf,":");
+        filename = strtok(buf+8,":");
         size_in_string = strtok(NULL,":");
         size_of_file = atoi(size_in_string);
-        printf("Name of file: %s.\nSize Of file: %s.\n",filename,size_in_string);
+        no_of_packets_str = strtok(NULL,":");
+        no_of_packets = atoi(no_of_packets_str);
+        seq = strtoint(buf,0);
+        printf("SeqNo %d\nName of file: %s.\nSize Of file: %s.\nNo Of Packets: %s\n",seq,filename,size_in_string,no_of_packets_str);
+        seqbuffer = (int*) malloc(sizeof(int)*(no_of_packets+2));
+        
+        for(int i = 0; i < no_of_packets+2;i++)
+            seqbuffer[i] = 0;
+        
+        seqbuffer[seq] = 1;
 
         fd = fopen(filename,"w+");        
         /*
@@ -211,22 +160,20 @@ int main(int argc, char **argv) {
          */
         bzero(buf,BUFSIZE);
         MD5_Init(&mdContext);
-        int i = ceil(size_of_file/((double)BUFSIZE));
-        int chunks = i;
-        //int i = 63;
-        while(--i){
-            n = read(sockfd,buf,BUFSIZE); 
-            MD5_Update(&mdContext,buf,BUFSIZE);
-            if (n < 0) 
-                error("ERROR reading from socket");
-            if(n == 0)
-                error("No file chunk received");
-            //if(n > 0)
-            //    printf("File chunk %d recieved.\n",i+1);
-            fwrite(buf,BUFSIZE,1,fd);
+        int i = 0;
+        
+        while(i != no_of_packets){
+            recvReliableUDP(sockfd,buf,&clientaddr); 
+            seq = strtoint(buf,0);
+            printf("Packet %d received\n",seq);
+            if(seqbuffer[seq] == 0)
+                i++;
+            seqbuffer[seq] = 1;
+            MD5_Update(&mdContext,buf+8,BUFSIZE);
+            fwrite(buf+8,BUFSIZE-8,1,fd);
             bzero(buf,BUFSIZE);
         }
-        printf("Received file in %d chunks.\n",chunks );
+        printf("Received file in %d chunks.\n",no_of_packets );
         
         fclose(fd);
         /*
@@ -237,10 +184,7 @@ int main(int argc, char **argv) {
         /* 
          * write: echo the input string back to the client 
          */
-        n = write(sockfd, checksum, MD5_DIGEST_LENGTH+1);
-        if (n < 0) 
-            error("ERROR writing to socket");
-
+        sendReliableUDP(sockfd,checksum, clientaddr);
         close(sockfd);
     }
 }

@@ -12,9 +12,10 @@
 #include <netdb.h> 
 #include <openssl/md5.h>
 #include <sys/stat.h>
+#include <math.h>
 
 #define BUFSIZE 1024
-#define TIMEOUT 5
+#define TIMEOUT 10
 /* 
  * error - wrapper for perror
  */
@@ -23,74 +24,7 @@ void error(char *msg) {
     exit(0);
 }
 
-void inttostr(char* array,int index,int value){
-    array[index] = (value >> 24) & 0xFF;
-    array[index+1] = (value>>16) & 0xFF;
-    array[index+2] = (value>>8) & 0xFF;
-    array[index+3] = value & 0xFF;
-    return;
-}
-
-int strtoint(char* array,int index){
-    return ((int)array[index])<<24 + ((int)array[index+1])<<16 + ((int)array[index+2])<<8 + (int)array[index+3];
-}
-
-_Bool checkACK(char* m,char* ack){
-    return (m[0]^ack[0])|(m[1]^ack[1])|(m[2]^ack[2])|(m[3]^ack[3]);
-}
-
-void createACK(char* ack,char* buf){
-    strncpy(ack,buf,4);
-    return;
-}
-
-void sendReliableUDP(int sockfd, char* buf,struct sockaddr_in serveraddr){
-    int n;
-    char recvbuf[BUFSIZE];
-    int serverlength = sizeof(serveraddr);
-    while(1){
-        n = sendto(sockfd, buf, BUFSIZE,0,(struct sockaddr *)&serveraddr,sizeof(serveraddr));
-        if (n < 0) 
-            error("ERROR writing to socket");
-        bzero(recvbuf,BUFSIZE);
-        n = recvfrom(sockfd, recvbuf, BUFSIZE,0,(struct sockaddr *)&serveraddr,&serverlength);
-        if (n < 0){ 
-            error("ERROR reading from socket");
-        }
-        else{
-            if(checkACK(buf,recvbuf) == 0)
-                break;
-        }
-    }
-    bzero(buf,BUFSIZE);
-    //strcpy(buf,recvbuf);
-    return;
-}
-
-void recvReliableUDP(int sockfd, char* buf, struct sockaddr_in serveraddr){
-    int n,serverlen = sizeof(serveraddr);
-    char ack[BUFSIZE];
-    n = recvfrom(sockfd,buf,BUFSIZE,0,(struct sockaddr*)&serveraddr,&serverlen);
-    if(n < 0)
-        error("Error reading from the socket");
-
-    createACK(ack,buf);
-    n = sendto(sockfd,ack,BUFSIZE,0,(struct sockaddr*)&serveraddr,serverlen);
-    if(n<0)
-        error("ERROR writing in server");
-    return;
-}
-
-void setSequenceNumber(char* buf,int* index){
-    inttostr(buf,0,*index);
-    *index = *index+1;
-}
-
-void setMessageSize(char* buf,int size){
-    inttostr(buf,4,size);
-}
-
-
+#include "../udpreliable.h"
 
 int main(int argc, char **argv) {
     int sockfd, portno, n,seq = 0;
@@ -136,7 +70,7 @@ int main(int argc, char **argv) {
     
     timeout.tv_sec = TIMEOUT;
     timeout.tv_usec = 0;
-    setsockopt(sockfd,SOL_SOCKET,SO_RCVTIMEO,(const char*) &timeout,sizeof(timeout));
+    //setsockopt(sockfd,SOL_SOCKET,SO_RCVTIMEO,(const char*) &timeout,sizeof(timeout));
 
     /* build the server's Internet address */
     bzero((char *) &serveraddr, sizeof(serveraddr));
@@ -162,17 +96,17 @@ int main(int argc, char **argv) {
     no_of_chunks_str = (char*) malloc(10);
     
     stat(filename,&st);
-    no_of_chunks = st.st_size/(BUFSIZE-8);
+    no_of_chunks = ceil(st.st_size/(double)(BUFSIZE-8));
     
     bzero(buf,BUFSIZE);
+    //buf[8] = '\0';
     strcpy(buf+8,filename); 
-    sprintf(size_in_string,"%d",st.st_size);
-    strcat(buf,":");
-    strcat(buf, size_in_string);
-    strcat(buf,":");
+    sprintf(size_in_string,"%d",(int)st.st_size);
+    strcat(buf+8,":");
+    strcat(buf+8, size_in_string);
+    strcat(buf+8,":");
     sprintf(no_of_chunks_str,"%d",no_of_chunks);
-    strcat(buf, no_of_chunks_str);
-
+    strcat(buf+8, no_of_chunks_str);
     setSequenceNumber(buf,&seq);
     setMessageSize(buf,strlen(buf));
     sendReliableUDP(sockfd,buf,serveraddr); 
@@ -182,6 +116,7 @@ int main(int argc, char **argv) {
     int i = 0;
     bzero(buf,BUFSIZE);
     
+    printf("File will be sent in %d packets.\n",no_of_chunks);
     while(feof(file) == 0){
         fread(buf+8,BUFSIZE-8,1,file);
 
@@ -190,23 +125,23 @@ int main(int argc, char **argv) {
         setSequenceNumber(buf,&seq);
         setMessageSize(buf,strlen(buf));
         sendReliableUDP(sockfd,buf,serveraddr);
-        
+        printf("Sent packet %d\n",seq);        
         bzero(buf,BUFSIZE);
         i++;
     }
-    printf("File divided into %d chunks for sending.\n",i+1);
-        
+    printf("\nFile sent in %d chunks.\n",i);
+     
     MD5_Final(checksum,&mdContext);
     checksum[MD5_DIGEST_LENGTH] = '\0';
 
 
     /* print the server's reply */
     bzero(buf, BUFSIZE);
-    recvReliableUDP(sockfd,buf,serveraddr);
+    recvReliableUDP(sockfd,buf,&serveraddr);
 
     if (n < 0) 
         error("ERROR reading from socket");
-    //printf("%s, %s\n",buf,checksum);
+    //printf("%s, %s\n",buf,checksum)
     if(strcmp(buf,checksum) == 0)
         printf("Check sum matched\n.");
     else
