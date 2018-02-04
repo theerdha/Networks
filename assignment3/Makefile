@@ -11,4 +11,4 @@ tcpclient:
 udpserver:
 	@gcc server/udpserver.c -o server/udpserver -lssl -lcrypto -lm
 udpclient:
-	@gcc client/udpclient.c -o client/udpclient -lssl -lcrypto 
+	@gcc client/udpclient.c -o client/udpclient -lssl -lcrypto -lm
