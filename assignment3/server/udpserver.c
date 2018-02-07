@@ -16,6 +16,7 @@
 #include <math.h>
 
 #define BUFSIZE 1024
+#define ACKSIZE 64
 #define TIMEOUT 10
 #if 0
 /* 
@@ -189,6 +190,7 @@ int main(int argc, char **argv) {
          */
         strcpy(buf,checksum);
         sendReliableUDP(sockfd,buf, clientaddr);
-        close(sockfd);
+        
     }
+    close(sockfd);
 }
