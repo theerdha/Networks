@@ -189,6 +189,7 @@ int main(int argc, char **argv) {
          */
         strcpy(buf,checksum);
         sendReliableUDP(sockfd,buf, clientaddr);
-        close(sockfd);
+        
     }
+    close(sockfd);
 }
