@@ -36,14 +36,14 @@ void createACK(char* ack,char* buf){
 
 void sendReliableUDP(int sockfd, char* buf,struct sockaddr_in serveraddr){
     int n;
-    char recvbuf[BUFSIZE];
+    char recvbuf[ACKSIZE];
     while(1){
         //printf("Sending %s\n",buf+8);
         n = sendto(sockfd, buf, BUFSIZE,0,(struct sockaddr *)&serveraddr,sizeof(serveraddr));
         if (n < 0) 
             error("ERROR writing to socket");
-        bzero(recvbuf,BUFSIZE);
-        n = recvfrom(sockfd, recvbuf, BUFSIZE,0,(struct sockaddr *)&serveraddr,(socklen_t*)sizeof(serveraddr));
+        bzero(recvbuf,ACKSIZE);
+        n = recvfrom(sockfd, recvbuf, ACKSIZE,0,(struct sockaddr *)&serveraddr,(socklen_t*)sizeof(serveraddr));
         //if (n < 0){ 
         //    error("ERROR receiving from socket");
         //}
@@ -59,15 +59,15 @@ void sendReliableUDP(int sockfd, char* buf,struct sockaddr_in serveraddr){
 
 void recvReliableUDP(int sockfd, char* buf, struct sockaddr_in* serveraddr){
     int n,serverlen = sizeof(*serveraddr);
-    char ack[BUFSIZE];
+    char ack[ACKSIZE];
     n = recvfrom(sockfd,buf,BUFSIZE,0,(struct sockaddr*)serveraddr,&serverlen);
     if(n < 0)
         error("Error reading from the socket");
     //printf("Received %s\n",buf+8);
-    bzero(ack,BUFSIZE);
+    bzero(ack,ACKSIZE);
     createACK(ack,buf);
    // printf("Sending ACK\n");
-    n = sendto(sockfd,ack,BUFSIZE,0,(struct sockaddr*)serveraddr,serverlen);
+    n = sendto(sockfd,ack,ACKSIZE,0,(struct sockaddr*)serveraddr,serverlen);
     if(n<0)
         error("ERROR writing in server");
 }

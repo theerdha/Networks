@@ -16,6 +16,7 @@
 #include <math.h>
 
 #define BUFSIZE 1024
+#define ACKSIZE 64
 #define TIMEOUT 10
 #if 0
 /* 
