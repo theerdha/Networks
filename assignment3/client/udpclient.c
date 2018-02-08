@@ -16,7 +16,7 @@
 
 #define BUFSIZE 1024
 #define ACKSIZE 64
-#define TIMEOUT 10
+#define TIMEOUT 1
 /* 
  * error - wrapper for perror
  */
@@ -126,7 +126,7 @@ int main(int argc, char **argv) {
         setSequenceNumber(buf,&seq);
         setMessageSize(buf,strlen(buf));
         sendReliableUDP(sockfd,buf,serveraddr);
-        printf("Sent packet %d\n",seq);        
+        //printf("Sent packet %d\n",seq);        
         bzero(buf,BUFSIZE);
         i++;
     }

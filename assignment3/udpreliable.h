@@ -50,6 +50,8 @@ void sendReliableUDP(int sockfd, char* buf,struct sockaddr_in serveraddr){
         //else{
             if(checkACK(buf,recvbuf) == 0)
                 break;
+            else
+                printf("Packet Retransmission");
        // }
     }
     bzero(buf,BUFSIZE);
