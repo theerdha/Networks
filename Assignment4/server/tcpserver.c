@@ -144,7 +144,7 @@ int main(int argc, char **argv) {
 		
 		if(fork() == 0)
 		{
-			sleep(10);
+			//sleep(10);
 			close(parentfd);
 		    /* 
 		     * gethostbyaddr: determine who sent the message 
