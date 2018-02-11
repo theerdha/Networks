@@ -16,7 +16,7 @@
 #include <arpa/inet.h>
 
 #define BUFSIZE 1024
-#define MAX_CLIENTS 5
+#define MAX_CLIENTS 1
 #define TIMEOUT 20
 #if 0
 /* 
@@ -124,6 +124,10 @@ int main(int argc, char **argv)
     /* 
      * check command line arguments 
      */
+    clientips[0] = "10.5.18.112";
+    clientport[0] = 9000;
+    client_names[0] = "buridi";
+
     if (argc != 2) {
         fprintf(stderr, "usage: %s <port>\n", argv[0]);
         exit(1);
