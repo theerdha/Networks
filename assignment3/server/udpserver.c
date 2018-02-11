@@ -1,4 +1,4 @@
-/* 
+	/* 
  * tcpserver.c - A simple TCP echo server 
  * usage: tcpserver <port>
  */
@@ -17,7 +17,7 @@
 
 #define BUFSIZE 1024
 #define ACKSIZE 64
-#define TIMEOUT 10
+#define TIMEOUT 1
 #if 0
 /* 
  * Structs exported from in.h
@@ -168,13 +168,18 @@ int main(int argc, char **argv) {
         while(i != no_of_packets){
             recvReliableUDP(sockfd,buf,&clientaddr); 
             seq = strtoint(buf,0);
-            printf("Packet %d received\n",seq);
-            if(seqbuffer[seq] == 0)
-                i++;
-            seqbuffer[seq] = 1;
-            MD5_Update(&mdContext,buf+8,BUFSIZE-8);
-            fwrite(buf+8,BUFSIZE-8,1,fd);
-            bzero(buf,BUFSIZE);
+            //printf("Packet %d received\n",seq);
+
+            if(seqbuffer[seq] == 0){
+                i++; 
+                seqbuffer[seq] = 1;
+                MD5_Update(&mdContext,buf+8,BUFSIZE-8);
+                fwrite(buf+8,BUFSIZE-8,1,fd);
+                bzero(buf,BUFSIZE);
+            }
+            else
+                printf("Duplicate Packet:%d received\n",seq);
+
         }
         printf("Received file in %d chunks.\n",no_of_packets );
         
