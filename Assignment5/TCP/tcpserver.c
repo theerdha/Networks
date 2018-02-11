@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netdb.h>
+#include <errno.h>
+#include <time.h>
 #include <sys/types.h> 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -15,6 +17,7 @@
 
 #define BUFSIZE 1024
 #define MAX_CLIENTS 5
+#define TIMEOUT 20
 #if 0
 /* 
  * Structs exported from in.h
@@ -81,13 +84,13 @@ void setUser(struct in_addr IP,unsigned short int port,int f)
     }
 }
 
-user NameLookUp(char* username)
+user* NameLookUp(char* username)
 {
     int i;
     for(i = 0; i < MAX_CLIENTS; i++)
     {
-        if(strcmp(user_info[i].name, username == 0))  
-            return user_info[i];
+        if(strcmp(user_info[i].name, username) == 0)  
+            return &user_info[i];
     }
 }
 
@@ -108,19 +111,16 @@ int main(int argc, char **argv)
     int n; /* message byte size */
     int i;
     struct timeval tv;
-    tv.tv_sec = 2;
-    tv.tv_usec = 500000;
-    int activefds = 0;
     char* clientips[MAX_CLIENTS];
     int clientports[MAX_CLIENTS];
     struct hostent* client_addr[MAX_CLIENTS];
     char* client_names[MAX_CLIENTS];
     char* receiver;
     char* message;
-
+    user* destination;
     /////////// INITALIZE THE CLIENT IPS AND PORTS ////////////////
     // TODO
-
+    // Initalize the status with zeros
     /* 
      * check command line arguments 
      */
@@ -129,6 +129,9 @@ int main(int argc, char **argv)
         exit(1);
     }
     portno = atoi(argv[1]);
+    
+    tv.tv_sec = 2;
+    tv.tv_usec = 0;
 
     /* 
      * socket: create the parent socket 
@@ -194,24 +197,21 @@ int main(int argc, char **argv)
     {
         // Store required fds
         //
-        activefds = 0;
         FD_ZERO(&readset); // reset readset
         FD_SET(STDIN_FILENO,&readset); // Adds std input fd
         FD_SET(parentfd,&readset); // Adds sevrer listening fd
-        
+
         for(i = 0; i < MAX_CLIENTS; i++){
             if(user_info[i].status == 1){
                 FD_SET(user_info[i].fd,&readset);
                 if(max_fd < user_info[i].fd)
                     max_fd = user_info[i].fd;
-                activefds += 1;
             }
         }
-        activefds += 2;
-        
+
         // Moniter the fds
         //
-        if((result = select(max_fd + 1,&readset,NULL,NULL,NULL)) == -1)
+        if((result = select(max_fd + 1,&readset,NULL,NULL,&tv)) == -1)
             error("Error occured in select");
 
         //Is server socket?
@@ -233,23 +233,64 @@ int main(int argc, char **argv)
             if(FD_ISSET(user_info[i].fd,&readset))
             {  
                 bzero(buf,BUFSIZE);
-               //read the message and display
+                //read the message and display
                 n = recv(user_info[i].fd, buf, BUFSIZE,0);
                 if (n < 0) 
                     error("ERROR reading from socket");
                 printf("%s/ %s", user_info[i].name, buf);     
-               
+
             }
         }
         bzero(buf,BUFSIZE);
 
         if(FD_ISSET(STDIN_FILENO,&readset))
         {
-           if((n = read(STDIN_FILENO,buf,BUFSIZE)) < 0)
-                error("Failed to read from STD input")
-            receiver = strtok(buf,'/');
-            message = strtok(NULL,'/');
-            
+            bzero(buf,BUFSIZE);
+            if((n = read(STDIN_FILENO,buf,BUFSIZE)) < 0)
+                error("Failed to read from STD input");
+            receiver = strtok(buf,"/");
+            message = strtok(NULL,"/");
+            destination = NameLookUp(receiver);
+            if(destination->status == 1){
+                if((n = send(destination->fd,buf,BUFSIZE,0)) < 0)
+                    perror("Failed to send data to destination");
+                if(errno == ECONNRESET){
+                    printf("Re Establishing connection\n");
+                    if( connect(destination->fd,(const struct sockaddr*)&destination->client,sizeof(destination->client)) < 0)
+                        perror("Couldn't establish connection");
+                    else{
+                        destination->timestamp = clock();
+                        destination->status = 1;
+                    }
+                    if((n = send(destination->fd,buf,BUFSIZE,0)) < 0)
+                        perror("Failed to send data to destination");
+                }
+            }
+            else{
+                if((childfd = socket(AF_INET,SOCK_STREAM,0) < 0) )
+                    perror("Unable to create socket for sending message");
+                else
+                    destination->fd = childfd;
+
+                if(connect(destination->fd,(const struct sockaddr*)&destination->client,sizeof(destination->client) ) < 0)
+                    perror("Couldn't establish connection");
+                else{
+                    destination->timestamp = clock();
+                    destination->status = 1;
+                    if((n = send(destination->fd,buf,BUFSIZE,0)) < 0)
+                        perror("Failed to send data to destination");
+                }
+            }
+            // How to quit the application
+            //
+        }
+
+        // RESET the status flags if connection is timedout and close the connection
+        for(i = 0; i < MAX_CLIENTS; i++){
+            if((clock() - user_info[i].timestamp)/CLOCKS_PER_SEC > TIMEOUT){
+                close(user_info[i].fd);
+                user_info[i].status = 0;
+            }
         }
     }
 }
