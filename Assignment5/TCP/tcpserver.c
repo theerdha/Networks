@@ -66,21 +66,28 @@ typedef struct USER
 
 user user_info[MAX_CLIENTS];
 
-void setUserfd(int port,int f)
+void setUser(struct in_addr IP,unsigned short int port,int f)
 {
     int i;
     for(i = 0; i < MAX_CLIENTS; i++)
     {
-        //if(user_info[i]. == port)user_info[i].fd = f;
+        if(user_info[i].client.sin_addr.s_addr == IP.s_addr)
+        {
+            user_info[i].fd = f;
+            user_info[i].client.sin_port = port;
+            user_info[i].status = 1;
+            user_info[i].timestamp = clock();
+        }
     }
 }
 
-char * NameLookUp(int f)
+user NameLookUp(char* username)
 {
     int i;
     for(i = 0; i < MAX_CLIENTS; i++)
     {
-        if(user_info[i].fd == f) return user_info[i].name;
+        if(strcmp(user_info[i].name, username == 0))  
+            return user_info[i];
     }
 }
 
@@ -108,6 +115,8 @@ int main(int argc, char **argv)
     int clientports[MAX_CLIENTS];
     struct hostent* client_addr[MAX_CLIENTS];
     char* client_names[MAX_CLIENTS];
+    char* receiver;
+    char* message;
 
     /////////// INITALIZE THE CLIENT IPS AND PORTS ////////////////
     // TODO
@@ -179,7 +188,7 @@ int main(int argc, char **argv)
 
     // Initialize read set
 
-    max_fd = parentfd; // TODO 
+    max_fd = parentfd; 
 
     while (1) 
     {
@@ -204,46 +213,43 @@ int main(int argc, char **argv)
         //
         if((result = select(max_fd + 1,&readset,NULL,NULL,NULL)) == -1)
             error("Error occured in select");
-        
+
+        //Is server socket?
+        //yes
+        if(FD_ISSET(parentfd,&readset))
+        {
+            while(errno != EAGAIN && errno != EWOULDBLOCK)
+            {
+                if((childfd = accept(parentfd,(struct sockaddr*)&clientaddr,&clientlen)) == -1) 
+                    perror("error in accept");
+                setUser(clientaddr.sin_addr,clientaddr.sin_port,childfd);
+
+            }
+        }
+
         // check client fds
         for(i = 0; i < MAX_CLIENTS ; i++)
         {
             if(FD_ISSET(user_info[i].fd,&readset))
-            {
-                //Is server socket?
-                //yes
-                if(i == parentfd)
-                {
-                    clientlen = sizeof(clientaddr);
-                    childfd = accept(parentfd,(struct sockaddr*)&clientaddr,&clientlen);
-                    if(childfd == -1) error("accept");
-                    else 
-                    {
-                        FD_SET(childfd,&readset);
-                        if(childfd > max_fd) max_fd = childfd;
-                        setUserfd(clientaddr.sin_port,childfd);
-                    }
-                }
-                // not a server socket
-                else
-                {
-                    //is stdin?
-                    if(i == 0)
-                    {
-
-                    }
-                    //not an stdin
-                    else
-                    {
-                        //read the message and display
-                        n = recv(i, buf, BUFSIZE,0);
-                        if (n < 0) 
-                            error("ERROR reading from socket");
-                        printf("Message from %s : %s", NameLookUp(i), buf);
-                    }
-                }
+            {  
+                bzero(buf,BUFSIZE);
+               //read the message and display
+                n = recv(user_info[i].fd, buf, BUFSIZE,0);
+                if (n < 0) 
+                    error("ERROR reading from socket");
+                printf("%s/ %s", user_info[i].name, buf);     
+               
             }
         }
+        bzero(buf,BUFSIZE);
 
+        if(FD_ISSET(STDIN_FILENO,&readset))
+        {
+           if((n = read(STDIN_FILENO,buf,BUFSIZE)) < 0)
+                error("Failed to read from STD input")
+            receiver = strtok(buf,'/');
+            message = strtok(NULL,'/');
+            
+        }
     }
 }
