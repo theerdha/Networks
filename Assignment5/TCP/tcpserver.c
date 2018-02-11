@@ -124,9 +124,10 @@ int main(int argc, char **argv)
     /* 
      * check command line arguments 
      */
-    clientips[0] = "10.5.18.112";
-    clientport[0] = 9000;
-    client_names[0] = "buridi";
+    clientips[0] = "10.145.188.132";
+    clientports[0] = 9000;
+    client_names[0] = "Theeru";
+    
 
     if (argc != 2) {
         fprintf(stderr, "usage: %s <port>\n", argv[0]);
@@ -191,6 +192,7 @@ int main(int argc, char **argv)
         user_info[i].client.sin_port = htons(clientports[i]);
         user_info[i].name = (char*) malloc(sizeof(char)*20);
         strcpy(user_info[i].name,client_names[i]);
+        user_info[i].status = 0;
     }
 
     // Initialize read set
@@ -234,7 +236,7 @@ int main(int argc, char **argv)
         // check client fds
         for(i = 0; i < MAX_CLIENTS ; i++)
         {
-            if(FD_ISSET(user_info[i].fd,&readset))
+            if(user_info[i].status == 1 && FD_ISSET(user_info[i].fd,&readset))
             {  
                 bzero(buf,BUFSIZE);
                 //read the message and display
@@ -291,7 +293,7 @@ int main(int argc, char **argv)
 
         // RESET the status flags if connection is timedout and close the connection
         for(i = 0; i < MAX_CLIENTS; i++){
-            if((clock() - user_info[i].timestamp)/CLOCKS_PER_SEC > TIMEOUT){
+            if(user_info[i].status == 1 && ((clock() - user_info[i].timestamp)/CLOCKS_PER_SEC > TIMEOUT)){
                 close(user_info[i].fd);
                 user_info[i].status = 0;
             }
