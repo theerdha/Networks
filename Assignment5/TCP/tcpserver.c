@@ -124,7 +124,7 @@ int main(int argc, char **argv)
     /* 
      * check command line arguments 
      */
-    clientips[0] = "10.145.188.132";
+    clientips[0] = "10.109.20.93";
     clientports[0] = 9000;
     client_names[0] = "Theeru";
     
@@ -186,7 +186,7 @@ int main(int argc, char **argv)
     // Initialize user data
     for(i = 0;i < MAX_CLIENTS; i++){
         client_addr[i] = gethostbyname(clientips[i]);
-        bzero(&(user_info[i].client),sizeof(user_info[i].client)); 
+        bzero((char*)&(user_info[i].client),sizeof(user_info[i].client)); 
         user_info[i].client.sin_family = AF_INET;    
         bcopy((char*)client_addr[i]->h_addr,(char*) &user_info[i].client.sin_addr.s_addr,client_addr[i]->h_length);
         user_info[i].client.sin_port = htons(clientports[i]);
@@ -273,7 +273,7 @@ int main(int argc, char **argv)
                 }
             }
             else{
-                if((childfd = socket(AF_INET,SOCK_STREAM,0) < 0) )
+                if((childfd = socket(AF_INET,SOCK_STREAM,0)) < 0 )
                     perror("Unable to create socket for sending message");
                 else
                     destination->fd = childfd;
