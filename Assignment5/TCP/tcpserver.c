@@ -74,7 +74,7 @@ void setUser(struct in_addr IP,unsigned short int port,int f)
     int i;
     for(i = 0; i < MAX_CLIENTS; i++)
     {
-        if(user_info[i].client.sin_addr.s_addr == IP.s_addr)
+        if(ntohs(user_info[i].client.sin_addr.s_addr) == ntohs(IP.s_addr))
         {
             user_info[i].fd = f;
             user_info[i].client.sin_port = port;
@@ -224,13 +224,13 @@ int main(int argc, char **argv)
         //yes
         if(FD_ISSET(parentfd,&readset))
         {
-            while(errno != EAGAIN && errno != EWOULDBLOCK)
-            {
+            //while(errno != EAGAIN && errno != EWOULDBLOCK)
+           // {
                 if((childfd = accept(parentfd,(struct sockaddr*)&clientaddr,&clientlen)) == -1) 
                     perror("error in accept");
                 setUser(clientaddr.sin_addr,clientaddr.sin_port,childfd);
 
-            }
+           // }
         }
 
         // check client fds
@@ -258,6 +258,8 @@ int main(int argc, char **argv)
             message = strtok(NULL,"/");
             destination = NameLookUp(receiver);
             if(destination->status == 1){
+                bzero(buf,BUFSIZE);
+                strcpy(buf,message);
                 if((n = send(destination->fd,buf,BUFSIZE,0)) < 0)
                     perror("Failed to send data to destination");
                 if(errno == ECONNRESET){
@@ -268,6 +270,8 @@ int main(int argc, char **argv)
                         destination->timestamp = clock();
                         destination->status = 1;
                     }
+                    bzero(buf,BUFSIZE);
+                    strcpy(buf,message);
                     if((n = send(destination->fd,buf,BUFSIZE,0)) < 0)
                         perror("Failed to send data to destination");
                 }
@@ -281,6 +285,8 @@ int main(int argc, char **argv)
                 if(connect(destination->fd,(const struct sockaddr*)&destination->client,sizeof(destination->client) ) < 0)
                     perror("Couldn't establish connection");
                 else{
+                    bzero(buf,BUFSIZE);
+                    strcpy(buf,message);
                     destination->timestamp = clock();
                     destination->status = 1;
                     if((n = send(destination->fd,buf,BUFSIZE,0)) < 0)
