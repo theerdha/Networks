@@ -125,9 +125,9 @@ int main(int argc, char **argv)
     /* 
      * check command line arguments 
      */
-    clientips[0] = "10.5.18.112";
+    clientips[0] = "10.109.20.93";
     clientports[0] = 9000;
-    client_names[0] = "buridi";
+    client_names[0] = "theeru";
     
 
     if (argc != 2) {
@@ -244,7 +244,12 @@ int main(int argc, char **argv)
                 n = recv(user_info[i].fd, buf, BUFSIZE,0);
                 if (n < 0) 
                     error("ERROR reading from socket");
-                printf("%s/ %s", user_info[i].name, buf);     
+                else if(n == 0){
+                    printf("Connection closed by %s\n",inet_ntoa(user_info[i].client.sin_addr));
+                    user_info[i].status = 0;
+                }
+                else
+                    printf("%s/ %s", user_info[i].name, buf);     
 
             }
         }
