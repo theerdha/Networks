@@ -74,7 +74,6 @@ void setUser(struct in_addr IP,unsigned short int port,int f)
     int i;
     for(i = 0; i < MAX_CLIENTS; i++)
     {
-        printf("user ip %d, %d\n",ntohs(user_info[i].client.sin_addr.s_addr),ntohs(IP.s_addr));
         if(ntohs(user_info[i].client.sin_addr.s_addr) == ntohs(IP.s_addr))
         {
             printf("port is %d\n",ntohs(port));
@@ -126,7 +125,7 @@ int main(int argc, char **argv)
     /* 
      * check command line arguments 
      */
-    clientips[0] = "localhost";
+    clientips[0] = "10.5.18.112";
     clientports[0] = 9000;
     client_names[0] = "buridi";
     
@@ -230,14 +229,14 @@ int main(int argc, char **argv)
         //yes
         if(FD_ISSET(parentfd,&readset))
         {
-            while(errno != EAGAIN && errno != EWOULDBLOCK)
-            {
+            //while(errno != EAGAIN && errno != EWOULDBLOCK)
+           // {
                 if((childfd = accept(parentfd,(struct sockaddr*)&clientaddr,&clientlen)) == -1) 
                     perror("error in accept");
                 setUser(clientaddr.sin_addr,clientaddr.sin_port,childfd);
                 printf("connection established with %d\n",clientaddr.sin_addr.s_addr);
 
-            }
+           // }
         }
 
         // check client fds
@@ -251,7 +250,7 @@ int main(int argc, char **argv)
                 n = recv(user_info[i].fd, buf, BUFSIZE,0);
                 if (n < 0) 
                     error("ERROR reading from socket");
-                printf("%s/ %s", user_info[i].name, buf);     
+                printf("%s/ %s\n", user_info[i].name, buf);     
 
             }
         }
@@ -266,6 +265,8 @@ int main(int argc, char **argv)
             message = strtok(NULL,"/");
             destination = NameLookUp(receiver);
             if(destination->status == 1){
+                bzero(buf,BUFSIZE);
+                strcpy(buf,message);
                 if((n = send(destination->fd,buf,BUFSIZE,0)) < 0)
                     perror("Failed to send data to destination");
                 if(errno == ECONNRESET){
@@ -276,6 +277,8 @@ int main(int argc, char **argv)
                         destination->timestamp = clock();
                         destination->status = 1;
                     }
+                    bzero(buf,BUFSIZE);
+                    strcpy(buf,message);
                     if((n = send(destination->fd,buf,BUFSIZE,0)) < 0)
                         perror("Failed to send data to destination");
                 }
@@ -289,6 +292,8 @@ int main(int argc, char **argv)
                 if(connect(destination->fd,(const struct sockaddr*)&destination->client,sizeof(destination->client) ) < 0)
                     perror("Couldn't establish connection");
                 else{
+                    bzero(buf,BUFSIZE);
+                    strcpy(buf,message);
                     destination->timestamp = clock();
                     destination->status = 1;
                     if((n = send(destination->fd,buf,BUFSIZE,0)) < 0)
