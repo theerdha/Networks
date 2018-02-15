@@ -1,4 +1,4 @@
-/* 
+	/* 
  * tcpserver.c - A simple TCP echo server 
  * usage: tcpserver <port>
  */
@@ -169,6 +169,7 @@ int main(int argc, char **argv) {
             recvReliableUDP(sockfd,buf,&clientaddr); 
             seq = strtoint(buf,0);
             //printf("Packet %d received\n",seq);
+
             if(seqbuffer[seq] == 0){
                 i++; 
                 seqbuffer[seq] = 1;
@@ -178,6 +179,7 @@ int main(int argc, char **argv) {
             }
             else
                 printf("Duplicate Packet:%d received\n",seq);
+
         }
         printf("Received file in %d chunks.\n",no_of_packets );
         
