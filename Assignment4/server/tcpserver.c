@@ -181,10 +181,10 @@ int main(int argc, char **argv) {
 		     */
 		    bzero(buf,BUFSIZE);
 		    MD5_Init(&mdContext);
-		    int i = ceil(size_of_file/((double)BUFSIZE));
-		    int chunks = i;
+		    int chunks = ceil(size_of_file/((double)BUFSIZE));
+		    int i;
 		    //int i = 63;
-		    for(int i = 0; i < chunks;i++){
+		    for(i = 0; i < chunks;i++){
 		        n = recv(childfd,buf,BUFSIZE,MSG_WAITALL); 
 		        MD5_Update(&mdContext,buf,BUFSIZE);
 		        if (n < 0) 

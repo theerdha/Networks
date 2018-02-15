@@ -118,6 +118,7 @@ int main(int argc, char **argv)
     char* client_names[MAX_CLIENTS];
     char* receiver;
     char* message;
+    char* temp;
     user* destination;
     /////////// INITALIZE THE CLIENT IPS AND PORTS ////////////////
     // TODO
@@ -128,6 +129,7 @@ int main(int argc, char **argv)
     clientips[0] = "10.5.18.112";
     clientports[0] = 9000;
     client_names[0] = "buridi";
+
     
 
     if (argc != 2) {
@@ -136,7 +138,7 @@ int main(int argc, char **argv)
     }
     portno = atoi(argv[1]);
     
-    tv.tv_sec = 2;
+    tv.tv_sec = TIMEOUT;
     tv.tv_usec = 0;
 
     /* 
@@ -231,10 +233,10 @@ int main(int argc, char **argv)
         {
             //while(errno != EAGAIN && errno != EWOULDBLOCK)
            // {
-                if((childfd = accept(parentfd,(struct sockaddr*)&clientaddr,&clientlen)) == -1) 
-                    perror("error in accept");
-                setUser(clientaddr.sin_addr,clientaddr.sin_port,childfd);
-                printf("connection established with %d\n",clientaddr.sin_addr.s_addr);
+
+            if((childfd = accept(parentfd,(struct sockaddr*)&clientaddr,&clientlen)) == -1) 
+                perror("error in accept");
+            setUser(clientaddr.sin_addr,clientaddr.sin_port,childfd);
 
            // }
         }
@@ -250,7 +252,12 @@ int main(int argc, char **argv)
                 n = recv(user_info[i].fd, buf, BUFSIZE,0);
                 if (n < 0) 
                     error("ERROR reading from socket");
-                printf("%s/ %s\n", user_info[i].name, buf);     
+                else if(n == 0){
+                    printf("Connection closed by %s\n",inet_ntoa(user_info[i].client.sin_addr));
+                    user_info[i].status = 0;
+                }
+                else
+                    printf("%s/ %s", user_info[i].name, buf);     
 
             }
         }
@@ -261,12 +268,18 @@ int main(int argc, char **argv)
             bzero(buf,BUFSIZE);
             if((n = read(STDIN_FILENO,buf,BUFSIZE)) < 0)
                 error("Failed to read from STD input");
-            receiver = strtok(buf,"/");
-            message = strtok(NULL,"/");
+            
+            receiver = (char*) malloc(sizeof(char)*20);
+            message = (char*) malloc(sizeof(char)*1000);
+            temp = strtok(buf,"/");
+            strcpy(receiver,temp);
+            temp = strtok(NULL,"/");
+            strcpy(message,temp);
             destination = NameLookUp(receiver);
+            bzero(buf,BUFSIZE);
+            strcpy(buf,message);
+            
             if(destination->status == 1){
-                bzero(buf,BUFSIZE);
-                strcpy(buf,message);
                 if((n = send(destination->fd,buf,BUFSIZE,0)) < 0)
                     perror("Failed to send data to destination");
                 if(errno == ECONNRESET){
@@ -277,8 +290,6 @@ int main(int argc, char **argv)
                         destination->timestamp = clock();
                         destination->status = 1;
                     }
-                    bzero(buf,BUFSIZE);
-                    strcpy(buf,message);
                     if((n = send(destination->fd,buf,BUFSIZE,0)) < 0)
                         perror("Failed to send data to destination");
                 }
@@ -292,8 +303,6 @@ int main(int argc, char **argv)
                 if(connect(destination->fd,(const struct sockaddr*)&destination->client,sizeof(destination->client) ) < 0)
                     perror("Couldn't establish connection");
                 else{
-                    bzero(buf,BUFSIZE);
-                    strcpy(buf,message);
                     destination->timestamp = clock();
                     destination->status = 1;
                     if((n = send(destination->fd,buf,BUFSIZE,0)) < 0)
