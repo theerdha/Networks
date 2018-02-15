@@ -151,8 +151,8 @@ int main(int argc, char **argv) {
         seq = strtoint(buf,0);
         printf("SeqNo %d\nName of file: %s.\nSize Of file: %s.\nNo Of Packets: %s\n",seq,filename,size_in_string,no_of_packets_str);
         seqbuffer = (int*) malloc(sizeof(int)*(no_of_packets+2));
-        
-        for(int i = 0; i < no_of_packets+2;i++)
+        int i;
+        for(i = 0; i < no_of_packets+2;i++)
             seqbuffer[i] = 0;
         
         seqbuffer[seq] = 1;
@@ -163,7 +163,7 @@ int main(int argc, char **argv) {
          */
         bzero(buf,BUFSIZE);
         MD5_Init(&mdContext);
-        int i = 0;
+        i = 0;
         
         while(i != no_of_packets){
             recvReliableUDP(sockfd,buf,&clientaddr); 
