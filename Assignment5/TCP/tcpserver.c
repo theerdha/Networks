@@ -16,7 +16,7 @@
 #include <arpa/inet.h>
 
 #define BUFSIZE 1024
-#define MAX_CLIENTS 1
+#define MAX_CLIENTS 2
 #define TIMEOUT 20
 #if 0
 /* 
@@ -125,10 +125,13 @@ int main(int argc, char **argv)
     /* 
      * check command line arguments 
      */
-    clientips[0] = "10.109.20.93";
+    clientips[0] = "10.64.244.57";
     clientports[0] = 9000;
     client_names[0] = "theeru";
-    
+    clientips[1] = "10.109.20.93";
+    clientports[1] = 9000;
+    client_names[1] = "buridi";
+        
 
     if (argc != 2) {
         fprintf(stderr, "usage: %s <port>\n", argv[0]);
@@ -247,10 +250,12 @@ int main(int argc, char **argv)
                 else if(n == 0){
                     printf("Connection closed by %s\n",inet_ntoa(user_info[i].client.sin_addr));
                     user_info[i].status = 0;
+                    close(user_info[i].fd);
                 }
-                else
-                    printf("%s/ %s", user_info[i].name, buf);     
-
+                else{
+                    printf("%s/%s", user_info[i].name, buf);     
+                    user_info[i].timestamp = clock();
+                }
             }
         }
         bzero(buf,BUFSIZE);
@@ -276,6 +281,13 @@ int main(int argc, char **argv)
                     perror("Failed to send data to destination");
                 if(errno == ECONNRESET){
                     printf("Re Establishing connection\n");
+                    close(destination->fd);
+                    
+                    if((childfd = socket(AF_INET,SOCK_STREAM,0)) < 0 )
+                        perror("Unable to create socket for sending message");
+                    else
+                        destination->fd = childfd;
+                  
                     if( connect(destination->fd,(const struct sockaddr*)&destination->client,sizeof(destination->client)) < 0)
                         perror("Couldn't establish connection");
                     else{
@@ -291,7 +303,7 @@ int main(int argc, char **argv)
                     perror("Unable to create socket for sending message");
                 else
                     destination->fd = childfd;
-
+                
                 if(connect(destination->fd,(const struct sockaddr*)&destination->client,sizeof(destination->client) ) < 0)
                     perror("Couldn't establish connection");
                 else{
