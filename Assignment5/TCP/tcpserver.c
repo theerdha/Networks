@@ -76,8 +76,9 @@ void setUser(struct in_addr IP,unsigned short int port,int f)
     {
         if(ntohs(user_info[i].client.sin_addr.s_addr) == ntohs(IP.s_addr))
         {
+            printf("port is %d\n",ntohs(port));
             user_info[i].fd = f;
-            user_info[i].client.sin_port = port;
+            user_info[i].client.sin_port = ntohs(port);
             user_info[i].status = 1;
             user_info[i].timestamp = clock();
         }
@@ -125,13 +126,15 @@ int main(int argc, char **argv)
     /* 
      * check command line arguments 
      */
-    clientips[0] = "10.64.244.57";
+
+    clientips[0] = "10.5.18.112";
     clientports[0] = 9000;
-    client_names[0] = "theeru";
-    clientips[1] = "10.109.20.93";
+    client_names[0] = "buridi_server";
+
+    clientips[1] = "10.5.18.69";
     clientports[1] = 9000;
-    client_names[1] = "buridi";
-        
+    client_names[1] = "my_server";
+       
 
     if (argc != 2) {
         fprintf(stderr, "usage: %s <port>\n", argv[0]);
@@ -190,7 +193,11 @@ int main(int argc, char **argv)
     // Initialize user data
     for(i = 0;i < MAX_CLIENTS; i++){
         client_addr[i] = gethostbyname(clientips[i]);
-        bzero((char*)&(user_info[i].client),sizeof(user_info[i].client)); 
+        if (client_addr[i] == NULL) {
+        fprintf(stderr,"ERROR, no such host as %s\n", clientips[i]);
+        exit(0);
+        }
+        bzero((char *)&(user_info[i].client),sizeof(user_info[i].client)); 
         user_info[i].client.sin_family = AF_INET;    
         bcopy((char*)client_addr[i]->h_addr,(char*) &user_info[i].client.sin_addr.s_addr,client_addr[i]->h_length);
         user_info[i].client.sin_port = htons(clientports[i]);
@@ -230,6 +237,7 @@ int main(int argc, char **argv)
         {
             //while(errno != EAGAIN && errno != EWOULDBLOCK)
            // {
+
             if((childfd = accept(parentfd,(struct sockaddr*)&clientaddr,&clientlen)) == -1) 
                 perror("error in accept");
             setUser(clientaddr.sin_addr,clientaddr.sin_port,childfd);
@@ -244,6 +252,7 @@ int main(int argc, char **argv)
             {  
                 bzero(buf,BUFSIZE);
                 //read the message and display
+                printf("here\n");
                 n = recv(user_info[i].fd, buf, BUFSIZE,0);
                 if (n < 0) 
                     error("ERROR reading from socket");
