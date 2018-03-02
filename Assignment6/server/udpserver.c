@@ -204,7 +204,7 @@ int main(int argc, char **argv) {
                 n = sendto(sockfd,ack,ACKSIZE,0,(struct sockaddr *)&clientaddr,sizeof(clientaddr));
                 if(n<0) error("ERROR writing in server1");
                 printf("original Packet:%d received\n",seq);
-                printf("i : %d\n", i);
+                //printf("i : %d\n", i);
             }
 
         }

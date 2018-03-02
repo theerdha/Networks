@@ -17,7 +17,7 @@
 #define BUFSIZE 1024
 #define ACKSIZE 64
 #define TIMEOUT 1
-#define WINDOW_SIZE 3
+#define MAX_WINDOW_SIZE 1000
 /* 
  * error - wrapper for perror
  */
@@ -44,7 +44,7 @@ void copy_struct(chunk* a,chunk* b)
     }
 }
 
-chunk chunk_buffer[WINDOW_SIZE];
+chunk chunk_buffer[MAX_WINDOW_SIZE];
 int ind = -1;
 int seq = 0;
 int sockfd, portno;
@@ -55,6 +55,7 @@ int serverlen;
 MD5_CTX mdContext;
 int no_of_chunks;
 unsigned char checksum[MD5_DIGEST_LENGTH+1];
+int WINDOW_SIZE = 3;
 
 void remove_from_buffer(int n)
 {
@@ -111,10 +112,12 @@ void sender_func(int start, int end, FILE* file,int chunk_buffer_count[])
             sendto(sockfd, buf, BUFSIZE,0,(struct sockaddr *)&serveraddr,sizeof(serveraddr));
             add_to_buffer(strtoint(buf,0),buf,chunk_buffer_count);
             i ++;
+            WINDOW_SIZE *= 2;
         }
         else
         {
             sendto(sockfd, chunk_buffer[buffer_index(i)].buf, BUFSIZE,0,(struct sockaddr *)&serveraddr,sizeof(serveraddr));
+            WINDOW_SIZE /= 2;
         }
 
     }
@@ -221,7 +224,7 @@ int main(int argc, char **argv) {
 
         if(endptr > no_of_chunks) endptr = no_of_chunks;
         //printf("send called from %d and %d\n",startptr,endptr);
-        if(startptr > endptr)break;
+        if(startptr >= endptr)break;
 		sender_func(startptr,endptr,file,chunk_buffer_count);
 		int count;
         int max = startptr - 1;
@@ -233,8 +236,10 @@ int main(int argc, char **argv) {
             int s = strtoint(buf,0);
             printf("ack received for %d seq num\n",s);
             if(s > max) max = s;
+            if(max == no_of_chunks)break;
         }
         //printf("here %d\n", max); 
+
         remove_from_buffer(max - startptr + 1);
         
         int x;
