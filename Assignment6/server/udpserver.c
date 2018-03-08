@@ -60,6 +60,18 @@ void error(char *msg) {
 
 #include "../udpreliable.h"
 
+int is_in(int arr[], int a,int n)
+{
+    int iter;
+    for(iter = 0; iter < n; iter ++)
+    {
+        if(arr[iter] == a) return iter;
+    }
+    return -1;
+}
+
+
+
 int main(int argc, char **argv) {
     int sockfd; /* socket */
     int portno; /* port to listen on */
@@ -85,15 +97,19 @@ int main(int argc, char **argv) {
     int* seqbuffer;
     struct timeval timeout;
     int expected_seqnumber;
+    int drop;
+	float drop_probability;
+
     //vector<int> seqRecv;
     /* 
      * check command line arguments 
      */
-    if (argc != 2) {
-        fprintf(stderr, "usage: %s <port>\n", argv[0]);
+    if (argc != 3) {
+        fprintf(stderr, "usage: %s <port> <drop-probability>\n", argv[0]);
         exit(1);
     }
     portno = atoi(argv[1]);
+	drop_probability = atof(argv[2]);
 
     /* 
      * socket: create the parent socket 
@@ -153,6 +169,23 @@ int main(int argc, char **argv) {
         size_of_file = atoi(size_in_string);
         no_of_packets_str = strtok(NULL,":");
         no_of_packets = atoi(no_of_packets_str);
+        drop = no_of_packets * drop_probability;
+
+        int arr[drop];
+        int check[drop];
+        int iter;
+
+        for(iter = 0; iter < drop; iter++)
+        {
+            arr[iter] = rand() % (no_of_packets - 1) + 1;
+            check[iter] = 1;
+        }
+
+        for(iter = 0; iter < drop; iter++)
+        {
+            printf("%d ",arr[iter]);
+        }
+        printf("\n");
         seq = strtoint(buf,0);
         printf("SeqNo %d\nName of file: %s.\nSize Of file: %s.\nNo Of Packets: %s\n",seq,filename,size_in_string,no_of_packets_str);
         int i;
@@ -172,10 +205,10 @@ int main(int argc, char **argv) {
             n = recvfrom(sockfd, buf, BUFSIZE,0,(struct sockaddr *)&clientaddr,&clientlen);
             if (n < 0) error("ERROR in recvfrom"); 
             seq = strtoint(buf,0);
-           // printf("seq = %d\n", seq);
+            printf("seq = %d\n", seq);
            
 
-            if(seq < expected_seqnumber)
+            if(seq != 0 && seq < expected_seqnumber)
             {
                 bzero(ack,ACKSIZE);
                 createdupACK(ack,expected_seqnumber - 1);
@@ -184,7 +217,7 @@ int main(int argc, char **argv) {
                 printf("duplicate packet:%d received\n",seq);
             }
 
-            else if(seq > expected_seqnumber)
+            else if(seq != 0 && seq > expected_seqnumber)
             {
                 bzero(ack,ACKSIZE);
                 //create ack with expected seqno -1
@@ -194,16 +227,25 @@ int main(int argc, char **argv) {
                 printf("out of order packet:%d received\n",seq);
             }
 
-            if(seq == expected_seqnumber){
+            else if(seq != 0 && seq == expected_seqnumber){
                 i++;
                 expected_seqnumber ++;
                 MD5_Update(&mdContext,buf+8,BUFSIZE-8);
                 fwrite(buf+8,BUFSIZE-8,1,fd);
                 bzero(ack,ACKSIZE);
                 createACK(ack,buf);
+
+                printf("original Packet:%d received\n",seq);
+                int temp = is_in(arr,seq,no_of_packets);
+                //packet drop
+                if(temp != -1 && check[temp] == 1)
+                {
+                    check[temp] = 0;
+                    continue;
+                }
                 n = sendto(sockfd,ack,ACKSIZE,0,(struct sockaddr *)&clientaddr,sizeof(clientaddr));
                 if(n<0) error("ERROR writing in server1");
-                printf("original Packet:%d received\n",seq);
+                
                 //printf("i : %d\n", i);
             }
 
