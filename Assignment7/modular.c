@@ -68,8 +68,12 @@ int size_of_file; /* size of file integer */
 char* filedata; /* file data */
 MD5_CTX mdContext; /* MD5 context data */
 unsigned char checksum[MD5_DIGEST_LENGTH+1]; /* MD5 checksum */
+unsigned char receivedchecksum[MD5_DIGEST_LENGTH+1]; /* MD5 checksum */
 struct stat st;
 int length_of_chunk;
+int set = 0;
+int start = 0;
+int exit_sig = 0;
 
 typedef struct DATA_PACKET
 {
@@ -200,7 +204,6 @@ int ReceiverQueueGet(char *old_)
 
 void appSend(char *client_hostname, int client_portno,char* filename)
 {
-	MD5_Init(&mdContext);
     file = fopen(filename,"r");
     struct stat st;
     stat(filename,&st);
@@ -230,7 +233,7 @@ void appSend(char *client_hostname, int client_portno,char* filename)
 
     char buf;
     bzero(&buf,1);
-
+    MD5_Init(&mdContext);
     while(feof(file) == 0)
     {
     	fread(&buf,1,1,file);
@@ -238,7 +241,7 @@ void appSend(char *client_hostname, int client_portno,char* filename)
     	SenderQueuePut(buf);
     	bzero(&buf,1);
     }
-    sleep(70);
+    while(exit_sig == 0);
 
     MD5_Final(checksum,&mdContext);
     checksum[MD5_DIGEST_LENGTH] = '\0';
@@ -263,43 +266,38 @@ void appRecv()
 	/////PARSE FIRST PACKET AND GET FILE NAME
 	char mess[MSS];
 	bzero(mess, MSS);
-	// int n = recvfrom(sockfd, mess, MSS,0,(struct sockaddr *)&server_clientaddr,&server_clientlen);
- //    if (n < 0) error("ERROR in recvfrom2"); 
     char charbuff[MSS];
-    ///typecast from char to data_packet.
- //    data_packet * a =(data_packet *)malloc(sizeof(mess));
-	// data_packet b;
-	// a = (data_packet *)mess;
-	// b = *a;
-	
-	// filename = strtok(b.payload,":");
-	// size_in_string = strtok(NULL,":");
- //    size_of_file = atoi(size_in_string);
-    sleep(10);
-    printf("opening the file %s\n",recvfilename);    
-	char buf;      
+    sleep(10);    
+ 	char buf;      
     MD5_Init(&mdContext);
     int count = 0;
-    printf("size of the file %d\n",size_of_file);  
+ 	while(start == 0);
+
     while(count < size_of_file)
     {
-    	while(ReceiverQueueIn == ReceiverQueueOut);
     	ReceiverQueueGet(&buf);
-    	MD5_Update(&mdContext,&buf,1);
 	    fwrite(&buf,1,1,file);
     	count ++;
     }
-    //send MD5 checksum
-    printf("calculating checksum\n");
- //    MD5_Final(checksum,&mdContext);
- //    checksum[MD5_DIGEST_LENGTH] = '\0';
- //    bzero(charbuff, MSS);
-	// recvfrom(sockfd, charbuff, MSS,0,(struct sockaddr *)&client_serveraddr,(socklen_t*)sizeof(client_serveraddr));
- //    printf("receieved %s , computed %s\n",charbuff,checksum);
- //    if(strcmp(charbuff,checksum) == 0)
- //        printf("Check sum matched\n.");
- //    else
- //        printf("Check sum not matched\n.");
+
+    while(set == 0);
+    fseek(file, 0, SEEK_SET);
+
+    while(feof(file) == 0)
+    {
+   		fread(&buf,1,1,file);
+   		MD5_Update(&mdContext,&buf,1);
+   		bzero(&buf,1);
+    }
+
+    MD5_Final(checksum,&mdContext);
+	checksum[MD5_DIGEST_LENGTH] = '\0';
+	printf("actual %s\n",checksum);
+	printf("recieved %s\n",receivedchecksum);
+	if(strcmp(receivedchecksum,checksum) == 0)
+	    printf("Check sum matched\n.");
+	else
+	    printf("Check sum not matched\n.");
     return;
 }
 
@@ -311,8 +309,8 @@ void * receiver_thread(void* unsused)
 	{
 		bzero(buf,MSS);
 		n = recvfrom(sockfd, buf, MSS ,0,(struct sockaddr *)&server_clientaddr,&server_clientlen);
-		if (n < 0) error("ERROR in recvfrom1"); 
-
+		//if (n < 0) error("ERROR in recvfrom1"); 
+		if (n < 0) pthread_exit(0);
 		//printf("received something\n");
 		data_packet * a= (data_packet *)malloc(sizeof(buf));
 		data_packet b;
@@ -333,22 +331,15 @@ void * receiver_thread(void* unsused)
 		}
 		else if(b.ack == 2)
 		{
-			sleep(5);
-			MD5_Final(checksum,&mdContext);
-		    checksum[MD5_DIGEST_LENGTH] = '\0';
-		    printf("actual %s\n",checksum);
-		    printf("recieved %s\n",b.payload);
-		    if(strcmp(b.payload,checksum) == 0)
-		        printf("Check sum matched\n.");
-		    else
-		        printf("Check sum not matched\n.");
-		    break;
+			strcpy(receivedchecksum,b.payload);
+			set = 1;
+			break;
 		}
 		else if(b.ack == 0)
 		{
 			Recv_buffer_handler(b);
 		}
-		else
+		else //b.ack = 3
 		{
 			printf("file name and size received\n");
 			recvfilename = strtok(b.payload,":");
@@ -356,6 +347,7 @@ void * receiver_thread(void* unsused)
 			size_in_string = strtok(NULL,":");
 			size_of_file = atoi(size_in_string);
 			file = fopen(recvfilename,"w+");
+			start = 1;
 		}
 
 	}
@@ -413,7 +405,7 @@ void retransmit()
 
     if(base + SWND < nextseqnum && i != ind + 1)  
     {
-    	data_packet d = create_packet(temp_buff[i - 1].seqnum);
+    	data_packet d = create_packet(temp_buff[i].seqnum);
 	    x = (data_packet *)charbuff;
 	    *x = d;
 	    n = sendto(sockfd, charbuff, d.length + 16,0,(struct sockaddr *)&client_serveraddr,sizeof(client_serveraddr));
@@ -486,6 +478,8 @@ void * rate_control(void* unsused)
 		}
 		if(size_of_file <= 0) break;	
 	}
+	printf("exited rate control thread normally\n");
+	exit_sig = 1;
 	pthread_exit(0);
 
 }
@@ -519,7 +513,7 @@ void update_window(int RWND,int seq, int size)
 			else CWND += (MSS / CWND);
 			dupack = 0;
 		}
-		printf("488  %d %d\n",RWND,CWND);
+		printf("RWND %d CWND %d\n",RWND,CWND);
 		SWND = min(RWND,CWND);
 	}
 }
