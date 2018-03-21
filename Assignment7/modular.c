@@ -19,12 +19,12 @@
 #define SENDER_QUEUE_SIZE (SENDER_QUEUE_ELEMENTS + 1)
 #define RECEIVER_QUEUE_ELEMENTS 100000
 #define RECEIVER_QUEUE_SIZE (RECEIVER_QUEUE_ELEMENTS + 1)
-#define SLEEP_VAL 1
+#define SLEEP_VAL 100
 #define TIMEOUT 1
 
 /////GLOBAL VARIABLES/////
-int SSTHRESH = 20 * 1024;
-int SWND = 1;
+int SSTHRESH = 20480;
+int SWND = 1024;
 int CWND = 1;
 int retrans = 0; //variable -- 1 : to retransmit 0 : to not
 int sender;
@@ -37,21 +37,20 @@ int timeroff = 0;
 int expectedseqnum = 1;
 int last_ack_length;
 int senderseqno = 1;
-int expected_seqnumber = 1;
 struct timeval timeout;
 
 char* filename;
 char buf[MSS]; 
 FILE* file;
 
-int client_sockfd, client_portno;
+int sockfd, client_portno;
 struct sockaddr_in client_serveraddr;
 struct hostent *client_server;
 char *client_hostname;
 int client_serverlen;
 MD5_CTX client_mdContext;
 
-int server_sockfd;
+//int sockfd;
 int server_clientlen; /* byte size of client's address */
 struct sockaddr_in server_serveraddr; /* server's addr */
 struct sockaddr_in server_clientaddr; /* client addr */
@@ -60,6 +59,7 @@ char * server_hostaddrp; /* dotted decimal host addr string */
 
 
 char* filename; /* file name*/
+char * recvfilename;
 char* size_in_string; /* size of file in string*/
 char* no_of_packets_str;
 int no_of_packets;
@@ -175,7 +175,7 @@ int SenderQueuePut(char new_)
 
 int SenderQueueGet(char *old_)
 {
-    if(SenderQueueIn == SenderQueueOut) return -1; /* Queue Empty - nothing to get*/
+    while(SenderQueueIn == SenderQueueOut); /* Queue Empty - nothing to get*/
     *old_ = SenderQueue[SenderQueueOut];
     SenderQueueOut = (SenderQueueOut + 1) % SENDER_QUEUE_SIZE;
     return 0; // No errors
@@ -191,7 +191,7 @@ int ReceiverQueuePut(char new_)
 
 int ReceiverQueueGet(char *old_)
 {
-    if(ReceiverQueueIn == ReceiverQueueOut) return -1; /* Queue Empty - nothing to get*/
+    while(ReceiverQueueIn == ReceiverQueueOut); /* Queue Empty - nothing to get*/
     *old_  = ReceiverQueue[ReceiverQueueOut];
     ReceiverQueueOut = (ReceiverQueueOut + 1) % RECEIVER_QUEUE_SIZE;
     return 0; // No errors
@@ -206,48 +206,56 @@ void appSend(char *client_hostname, int client_portno,char* filename)
     stat(filename,&st);
     size_in_string = (char*) malloc(10);
     sprintf(size_in_string,"%d",(int)st.st_size);
+    size_of_file = atoi(size_in_string);
 
     ///SEND THE FIRST MESSAGE
 
     data_packet first;
     first.seqnum = 0;
-    first.ack = 0;
+    first.ack = 3;
     strcpy(first.payload,filename);
     strcat(first.payload,":");
     strcat(first.payload,size_in_string);
     first.length = strlen(first.payload);
 
-    data_packet * x = (data_packet *)malloc(sizeof(first));
+    data_packet * x;
     char charbuff[MSS];
-    *x = first;
+    char mess[MSS];
     x = (data_packet *)charbuff;
     *x = first;
     printf("appsend....\n");
-    int n = sendto(client_sockfd, charbuff, sizeof(first),0,(struct sockaddr *)&client_serveraddr,sizeof(client_serveraddr));
+    int n = sendto(sockfd, charbuff, sizeof(first),0,(struct sockaddr *)&client_serveraddr,sizeof(client_serveraddr));
     if (n < 0) error("ERROR in sendto");
+    printf("File %s will be sent.\n",filename);
 
     char buf;
     bzero(&buf,1);
 
     while(feof(file) == 0)
     {
-    	while(SenderQueueIn == (( SenderQueueOut + SENDER_QUEUE_ELEMENTS) % (SENDER_QUEUE_ELEMENTS - 1)));
     	fread(&buf,1,1,file);
     	MD5_Update(&mdContext,&buf,1);
     	SenderQueuePut(buf);
     	bzero(&buf,1);
     }
-    
-	MD5_Final(checksum,&mdContext);
-    checksum[MD5_DIGEST_LENGTH] = '\0';
-    bzero(charbuff, MSS);
-	recvfrom(client_sockfd, charbuff, MSS,0,(struct sockaddr *)&client_serveraddr,(socklen_t*)sizeof(client_serveraddr));
-    printf("%s, %s\n",charbuff,checksum);
-    if(strcmp(charbuff,checksum) == 0)
-        printf("Check sum matched\n.");
-    else
-        printf("Check sum not matched\n.");
+    sleep(70);
 
+    MD5_Final(checksum,&mdContext);
+    checksum[MD5_DIGEST_LENGTH] = '\0';
+    printf("%s\n",checksum);
+    //strcpy(mess,checksum);
+
+    data_packet last;
+    last.seqnum = 0;
+    last.ack = 2;
+    strcpy(last.payload,checksum);
+ 	*x = last;
+
+	n = sendto(sockfd, charbuff, sizeof(last),0,(struct sockaddr *)&client_serveraddr,sizeof(client_serveraddr));
+	if (n < 0) error("ERROR in sendto");
+	fclose(file);
+	close(sockfd);
+	return;
 }
 
 void appRecv()
@@ -255,23 +263,24 @@ void appRecv()
 	/////PARSE FIRST PACKET AND GET FILE NAME
 	char mess[MSS];
 	bzero(mess, MSS);
-	int n = recvfrom(server_sockfd, mess, MSS,0,(struct sockaddr *)&server_clientaddr,&server_clientlen);
-    if (n < 0) error("ERROR in recvfrom2"); 
-
+	// int n = recvfrom(sockfd, mess, MSS,0,(struct sockaddr *)&server_clientaddr,&server_clientlen);
+ //    if (n < 0) error("ERROR in recvfrom2"); 
+    char charbuff[MSS];
     ///typecast from char to data_packet.
-    data_packet * a =(data_packet *)malloc(sizeof(mess));
-	data_packet b;
-	a = (data_packet *)mess;
-	b = *a;
+ //    data_packet * a =(data_packet *)malloc(sizeof(mess));
+	// data_packet b;
+	// a = (data_packet *)mess;
+	// b = *a;
 	
-	filename = strtok(b.payload,":");
-	size_in_string = strtok(NULL,":");
-    size_of_file = atoi(size_in_string);
-        
-	file = fopen(filename,"w+");  
+	// filename = strtok(b.payload,":");
+	// size_in_string = strtok(NULL,":");
+ //    size_of_file = atoi(size_in_string);
+    sleep(10);
+    printf("opening the file %s\n",recvfilename);    
 	char buf;      
     MD5_Init(&mdContext);
     int count = 0;
+    printf("size of the file %d\n",size_of_file);  
     while(count < size_of_file)
     {
     	while(ReceiverQueueIn == ReceiverQueueOut);
@@ -281,13 +290,17 @@ void appRecv()
     	count ++;
     }
     //send MD5 checksum
-    MD5_Final(checksum,&mdContext);
-    checksum[MD5_DIGEST_LENGTH] = '\0';
-    printf("%s\n",checksum);
-    strcpy(mess,checksum);
-	n = sendto(server_sockfd, mess, MSS,0,(struct sockaddr *)&server_clientaddr,sizeof(server_clientaddr));
-	if (n < 0) error("ERROR in sendto");
-	fclose(file);
+    printf("calculating checksum\n");
+ //    MD5_Final(checksum,&mdContext);
+ //    checksum[MD5_DIGEST_LENGTH] = '\0';
+ //    bzero(charbuff, MSS);
+	// recvfrom(sockfd, charbuff, MSS,0,(struct sockaddr *)&client_serveraddr,(socklen_t*)sizeof(client_serveraddr));
+ //    printf("receieved %s , computed %s\n",charbuff,checksum);
+ //    if(strcmp(charbuff,checksum) == 0)
+ //        printf("Check sum matched\n.");
+ //    else
+ //        printf("Check sum not matched\n.");
+    return;
 }
 
 void * receiver_thread(void* unsused)
@@ -297,9 +310,10 @@ void * receiver_thread(void* unsused)
 	while(1)
 	{
 		bzero(buf,MSS);
-		n = recvfrom(server_sockfd, buf, MSS ,0,(struct sockaddr *)&server_clientaddr,&server_clientlen);
+		n = recvfrom(sockfd, buf, MSS ,0,(struct sockaddr *)&server_clientaddr,&server_clientlen);
 		if (n < 0) error("ERROR in recvfrom1"); 
 
+		//printf("received something\n");
 		data_packet * a= (data_packet *)malloc(sizeof(buf));
 		data_packet b;
 		a = (data_packet *)buf;
@@ -310,20 +324,53 @@ void * receiver_thread(void* unsused)
 		{
 			ackrecv = 1;
 			base = b.seqnum + b.length;
-	    	if(base == nextseqnum) alarm_status = 1; 
+	    	if(base == nextseqnum); 
 	    	else alarm(SLEEP_VAL);
+	    	printf("received ack %d\n",b.seqnum);
+	    	//printf("base is %d\n",base);
 	    	////////remove_from_buffer(1);
 			update_window(b.rwnd,b.seqnum,b.length);
 		}
-		else
+		else if(b.ack == 2)
+		{
+			sleep(5);
+			MD5_Final(checksum,&mdContext);
+		    checksum[MD5_DIGEST_LENGTH] = '\0';
+		    printf("actual %s\n",checksum);
+		    printf("recieved %s\n",b.payload);
+		    if(strcmp(b.payload,checksum) == 0)
+		        printf("Check sum matched\n.");
+		    else
+		        printf("Check sum not matched\n.");
+		    break;
+		}
+		else if(b.ack == 0)
 		{
 			Recv_buffer_handler(b);
+		}
+		else
+		{
+			printf("file name and size received\n");
+			recvfilename = strtok(b.payload,":");
+			printf("file name %s\n",b.payload);
+			size_in_string = strtok(NULL,":");
+			size_of_file = atoi(size_in_string);
+			file = fopen(recvfilename,"w+");
 		}
 
 	}
 	pthread_exit(0);
 }
-
+int min(int a, int b)
+{
+	if(a < b)return a;
+	else return b;
+}
+int max(int a, int b)
+{
+	if(a > b)return a;
+	else return b;
+}
 data_packet create_packet(int aa)
 {
 	printf("creating packet\n");
@@ -331,18 +378,22 @@ data_packet create_packet(int aa)
 	new_.ack = 0;
 	new_.seqnum = aa;
 
-	if(base + SWND - aa >= MSS - 16) new_.length = MSS - 16;	
-	else new_.length = base + SWND - aa;
-		
+	//printf("sender queue in %d\n",SenderQueueIn );
+	if( min(base + SWND,SenderQueueIn) - aa >= MSS - 16) new_.length = MSS - 16;	
+	else new_.length = min(base + SWND,SenderQueueIn)- aa;
+	printf("length being created is %d\n",new_.length);	
 	for(int x = 0; x < new_.length; x++)
 	{
-		SenderQueueGet(&new_.payload[x + aa]);
+		SenderQueueGet(&new_.payload[x]);
 	}	
+	printf("size of new packet %d called with %d\n",new_.length,aa);
+	printf("I came out\n");
 	return new_;
 }
 
 void retransmit()
 {
+	printf("retransmit called\n");
 	data_packet * x;
     char charbuff[MSS];
     int i,n;
@@ -353,7 +404,7 @@ void retransmit()
 	    	*x = temp_buff[i];
 	    	 x = (data_packet *)charbuff;
 	    	*x = temp_buff[i];
-	    	n = sendto(client_sockfd, charbuff, sizeof(temp_buff[i]),0,(struct sockaddr *)&client_serveraddr,sizeof(client_serveraddr));
+	    	n = sendto(sockfd, charbuff, sizeof(temp_buff[i]),0,(struct sockaddr *)&client_serveraddr,sizeof(client_serveraddr));
 	    	if (n < 0) error("ERROR in sendto");
 	    	ackrecv = 0;
 	    }
@@ -363,10 +414,9 @@ void retransmit()
     if(base + SWND < nextseqnum && i != ind + 1)  
     {
     	data_packet d = create_packet(temp_buff[i - 1].seqnum);
-    	*x = d;
 	    x = (data_packet *)charbuff;
 	    *x = d;
-	    n = sendto(client_sockfd, charbuff, d.length + 16,0,(struct sockaddr *)&client_serveraddr,sizeof(client_serveraddr));
+	    n = sendto(sockfd, charbuff, d.length + 16,0,(struct sockaddr *)&client_serveraddr,sizeof(client_serveraddr));
 	    if (n < 0) error("ERROR in sendto");
 	    ackrecv = 0;
     }
@@ -375,11 +425,10 @@ void retransmit()
     {
     	data_packet d = create_packet(nextseqnum);
     	nextseqnum += d.length;
-    	*x = d;
 	    x = (data_packet *)charbuff;
 	    *x = d;
 
-	    n = sendto(client_sockfd, charbuff, d.length + 16,0,(struct sockaddr *)&client_serveraddr,sizeof(client_serveraddr));
+	    n = sendto(sockfd, charbuff, d.length + 16,0,(struct sockaddr *)&client_serveraddr,sizeof(client_serveraddr));
 	    if (n < 0) error("ERROR in sendto");
 		add_to_buffer(d);
 		ackrecv = 0;
@@ -387,54 +436,58 @@ void retransmit()
 
 }
 
+void * retransmission(void *unsused)
+{
+	while(alarm_status == 0);
+	retrans = 1;
+	update_window(0,0,0);
+	alarm(SLEEP_VAL);
+	retransmit();
+	retrans = 0;
+	pthread_exit(0);
+}
 
 void * rate_control(void* unsused)
 {	
+	printf("in rate control\n");
+	printf("size of file %d\n",size_of_file);
 
-	while(size_of_file --)
-	{	
-		printf("in rate control\n");
-		if(alarm_status == 0)
+	while(1)
+	{
+		while(size_of_file == 0);
+		sleep(2);
+		//printf("in rate control\n");
+		if(alarm_status == 0 && retrans == 0)
 		{
-			if(nextseqnum < base + SWND && nextseqnum < SenderQueueIn)
+			while(nextseqnum > SenderQueueIn);
+			data_packet * x;
+			//x = (data_packet *)malloc(sizeof(data_packet));
+			char charbuff[MSS];
+			if(nextseqnum < base + SWND && nextseqnum <= SenderQueueIn)
 			{
 				//createpacket function
 				if(base == nextseqnum)
 	            alarm(SLEEP_VAL);
 
 				data_packet d = create_packet(nextseqnum);
-				data_packet * x;
-			    char charbuff[MSS];
-			    *x = d;
+				printf("***********************\n");
 			    x = (data_packet *)charbuff;
 			    *x = d;
-
-			    int n = sendto(client_sockfd, charbuff, d.length + 16,0,(struct sockaddr *)&client_serveraddr,sizeof(client_serveraddr));
+			    size_of_file -= d.length;
+			    int n = sendto(sockfd, charbuff, d.length + 16,0,(struct sockaddr *)&client_serveraddr,sizeof(client_serveraddr));
 			    if (n < 0) error("ERROR in sendto");
+			    printf("**sent packet %d of size %d\n",d.seqnum,d.length);
 				add_to_buffer(d);//add the data packet to buffer
 				nextseqnum += d.length;
+				printf("next seq %d\n",nextseqnum);
 				ackrecv = 0;
+				//free(x);
 			}
 		}
-		else
-		{
-			//// retransmission
-			retrans = 1;
-			update_window(0,0,0);
-			alarm(SLEEP_VAL);
-			retransmit();
-			retrans = 0;
-
-		}	
+		if(size_of_file <= 0) break;	
 	}
 	pthread_exit(0);
 
-}
-
-int min(int a, int b)
-{
-	if(a < b)return a;
-	else return b;
 }
 
 /////should also be called when retransmission happens.
@@ -445,7 +498,7 @@ void update_window(int RWND,int seq, int size)
 	if(retrans == 1)
 	{
 		SSTHRESH /= 2;
-		CWND = 1;
+		CWND = MSS;
 	}
 
 	else
@@ -466,16 +519,18 @@ void update_window(int RWND,int seq, int size)
 			else CWND += (MSS / CWND);
 			dupack = 0;
 		}
+		printf("488  %d %d\n",RWND,CWND);
+		SWND = min(RWND,CWND);
 	}
-	SWND = min(RWND,CWND);
 }
 
 void Recv_buffer_handler(data_packet d)
 {
 
-	if(d.seqnum != expected_seqnumber)
+	if(d.seqnum != expectedseqnum)
     {
     	// create a duplicate acknowledgement and send
+    	printf("recv %d expected seq num %d\n",d.seqnum,expectedseqnum);
     	data_packet ac;
     	data_packet * acptr;
     	char buff[MSS];
@@ -485,13 +540,13 @@ void Recv_buffer_handler(data_packet d)
     	ac.rwnd = RECEIVER_QUEUE_SIZE - ReceiverQueueIn; //////modify this!!!!
     	acptr = (data_packet *)buff;
     	*acptr = ac;
-    	int n = sendto(server_sockfd,buff,sizeof(ac),0,(struct sockaddr *)&server_clientaddr,sizeof(server_clientaddr));
+    	int n = sendto(sockfd,buff,sizeof(ac),0,(struct sockaddr *)&server_clientaddr,sizeof(server_clientaddr));
         if(n<0) error("ERROR writing in server3");
         printf("duplicate packet:%d received\n",d.seqnum);
     }
 
 
-    if(d.seqnum == expected_seqnumber)
+    if(d.seqnum == expectedseqnum)
     {
     	
     	for(int x = 0; x < d.length; x++)
@@ -509,12 +564,14 @@ void Recv_buffer_handler(data_packet d)
     	ac.ack = 1;
     	ac.seqnum = d.seqnum;
     	ac.length = d.length;
-    	ac.rwnd = RECEIVER_QUEUE_SIZE - ReceiverQueueIn; //////modify this!!!!
+    	ac.rwnd = RECEIVER_QUEUE_SIZE - ReceiverQueueIn;
+    	printf("RWND %d\n",ac.rwnd); //////modify this!!!!
     	acptr = (data_packet *)buff;
     	*acptr = ac;
-    	int n = sendto(server_sockfd,buff,sizeof(ac),0,(struct sockaddr *)&server_clientaddr,sizeof(server_clientaddr));
+    	int n = sendto(sockfd,buff,sizeof(ac),0,(struct sockaddr *)&server_clientaddr,sizeof(server_clientaddr));
         if(n<0) error("ERROR writing in server3");
         printf("original Packet:%d received\n",d.seqnum);
+        printf("expected seq num %d\n",expectedseqnum);
     }
 }
 
@@ -528,10 +585,11 @@ int main(int argc, char **argv)
 		fprintf(stderr,"usage: %s <hostname> <port> <filename> or %s <port> <drop-probability>\n", argv[0], argv[0]);
         exit(0);	
 	}
-	pthread_t tid1,tid2;
-	pthread_attr_t attr1,attr2;
+	pthread_t tid1,tid2,tid3;
+	pthread_attr_t attr1,attr2,attr3;
 	pthread_attr_init(&attr1);
 	pthread_attr_init(&attr2);
+	pthread_attr_init(&attr3);
 
 	if (argc == 4) {
         sender = 1; // client --> sends the file
@@ -540,8 +598,8 @@ int main(int argc, char **argv)
 	    filename = argv[3];
 
 	    QueueInit(SenderQueueIn, SenderQueueOut);
-	    client_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-	    if (client_sockfd < 0) 
+	    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+	    if (sockfd < 0) 
 	        error("ERROR opening socket");
 	    /* gethostbyname: get the server's DNS entry */
 	    client_server = gethostbyname(client_hostname);
@@ -552,7 +610,7 @@ int main(int argc, char **argv)
 	    
 	    timeout.tv_sec = 0;
 	    timeout.tv_usec = 0;
-	    //setsockopt(client_sockfd,SOL_SOCKET,SO_RCVTIMEO,(const char*) &timeout,sizeof(timeout));
+	    //setsockopt(sockfd,SOL_SOCKET,SO_RCVTIMEO,(const char*) &timeout,sizeof(timeout));
 
 	    /* build the server's Internet address */
 	    bzero((char *) &client_serveraddr, sizeof(client_serveraddr));
@@ -563,36 +621,38 @@ int main(int argc, char **argv)
 
 	    pthread_create(&tid1,&attr1,rate_control,NULL);
 		pthread_create(&tid2,&attr2,receiver_thread,NULL);
-		printf("client Running ....\n");
-	    appSend(client_hostname,client_portno,filename);
-	    
+		pthread_create(&tid3,&attr3,retransmission,NULL);
+		appSend(client_hostname,client_portno,filename);
+		exit(0);
+		pthread_join(tid1,NULL);
+    	pthread_join(tid2,NULL);
+    	pthread_join(tid3,NULL);
+	    return 0;
 		
     }
     else if (argc == 2) {
         sender = -1; // server --> receives the file
         server_portno = atoi(argv[1]);
         QueueInit(ReceiverQueueIn, ReceiverQueueOut);
-        server_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-	    if (server_sockfd < 0) error("ERROR opening socket");
+        sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+	    if (sockfd < 0) error("ERROR opening socket");
 	    timeout.tv_sec = 0;
 	    timeout.tv_usec = 0;
-	    setsockopt(server_sockfd, SOL_SOCKET, SO_RCVTIMEO|SO_REUSEADDR, (const char *)&timeout , sizeof(timeout));
+	    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO|SO_REUSEADDR, (const char *)&timeout , sizeof(timeout));
 
 	    bzero((char *) &server_serveraddr, sizeof(server_serveraddr));
 	    server_serveraddr.sin_family = AF_INET;
 	    server_serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
 	    server_serveraddr.sin_port = htons((unsigned short)server_portno);
 
-	    if (bind(server_sockfd, (struct sockaddr *) &server_serveraddr, sizeof(server_serveraddr)) < 0) error("ERROR on binding");
+	    if (bind(sockfd, (struct sockaddr *) &server_serveraddr, sizeof(server_serveraddr)) < 0) error("ERROR on binding");
 	    printf("Server Running ....\n");
 	    server_clientlen = sizeof(server_clientaddr);
-        pthread_create(&tid1,&attr1,rate_control,NULL);
 		pthread_create(&tid2,&attr2,receiver_thread,NULL);
 		appRecv();
+		pthread_join(tid2,NULL);
+		close(sockfd);
+		return 0;
     }
 
-    pthread_join(tid1,NULL);
-    pthread_join(tid2,NULL);
-    return 0;
-
-}
+}	
