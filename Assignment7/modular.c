@@ -367,7 +367,7 @@ int max(int a, int b)
 }
 data_packet create_packet(int aa)
 {
-	printf("creating packet\n");
+	//printf("creating packet\n");
 	data_packet new_;
 	new_.ack = 0;
 	new_.seqnum = aa;
@@ -375,13 +375,13 @@ data_packet create_packet(int aa)
 	//printf("sender queue in %d\n",SenderQueueIn );
 	if( min(base + SWND,SenderQueueIn) - aa >= MSS - 16) new_.length = MSS - 16;	
 	else new_.length = min(base + SWND,SenderQueueIn)- aa;
-	printf("length being created is %d\n",new_.length);	
+	//printf("length being created is %d\n",new_.length);	
 	for(int x = 0; x < new_.length; x++)
 	{
 		SenderQueueGet(&new_.payload[x]);
 	}	
-	printf("size of new packet %d called with %d\n",new_.length,aa);
-	printf("I came out\n");
+	printf("size of new packet %d called with sequence number %d\n",new_.length,aa);
+	//printf("I came out\n");
 	return new_;
 }
 
@@ -406,7 +406,7 @@ void retransmit()
 
     if(base + SWND <= nextseqnum && i != ind + 1)  
     {
-    	printf("here\n");
+    	//printf("here\n");
     	data_packet d = create_packet(temp_buff[i].seqnum);
 	    x = (data_packet *)charbuff;
 	    *x = d;
@@ -418,7 +418,7 @@ void retransmit()
 
     while(nextseqnum < base + SWND)
     {
-    	printf("here1\n");
+    	//printf("here1\n");
     	data_packet d = create_packet(nextseqnum);
     	nextseqnum += d.length;
 	    x = (data_packet *)charbuff;
@@ -572,14 +572,14 @@ void Recv_buffer_handler(data_packet d)
     	printf("RWND %d\n",ac.rwnd); //////modify this!!!!
     	acptr = (data_packet *)buff;
     	*acptr = ac;
-    	if( !((drop_count == 3 && d.seqnum == 1010) || (drop_count == 2 && d.seqnum == 3028) || (drop_count == 2 && d.seqnum == 5043)) )
+    	if( (drop_count == 3 && d.seqnum == 1009) || (drop_count == 2 && d.seqnum == 3028) || (drop_count == 1 && d.seqnum == 5044) )
         {
-            int n = sendto(sockfd,buff,sizeof(ac),0,(struct sockaddr *)&server_clientaddr,sizeof(server_clientaddr));
-            if(n<0) error("ERROR writing in server3");
+         	drop_count --;
         }
         else
         {
-            drop_count --;
+        	int n = sendto(sockfd,buff,sizeof(ac),0,(struct sockaddr *)&server_clientaddr,sizeof(server_clientaddr));
+            if(n<0) error("ERROR writing in server3");
         }
         printf("original Packet:%d received\n",d.seqnum);
         printf("expected seq num %d\n",expectedseqnum);
