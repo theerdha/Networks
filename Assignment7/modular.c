@@ -19,7 +19,7 @@
 #define SENDER_QUEUE_SIZE (SENDER_QUEUE_ELEMENTS + 1)
 #define RECEIVER_QUEUE_ELEMENTS 100000
 #define RECEIVER_QUEUE_SIZE (RECEIVER_QUEUE_ELEMENTS + 1)
-#define SLEEP_VAL 100
+#define SLEEP_VAL 10
 #define TIMEOUT 1
 
 /////GLOBAL VARIABLES/////
@@ -74,6 +74,7 @@ int length_of_chunk;
 int set = 0;
 int start = 0;
 int exit_sig = 0;
+int drop_count = 3;
 
 typedef struct DATA_PACKET
 {
@@ -277,6 +278,7 @@ void appRecv()
     {
     	ReceiverQueueGet(&buf);
 	    fwrite(&buf,1,1,file);
+	    //printf("im writing %s\n",&buf);
     	count ++;
     }
 
@@ -326,7 +328,7 @@ void * receiver_thread(void* unsused)
 	    	else alarm(SLEEP_VAL);
 	    	printf("received ack %d\n",b.seqnum);
 	    	//printf("base is %d\n",base);
-	    	////////remove_from_buffer(1);
+	    	remove_from_buffer(1);
 			update_window(b.rwnd,b.seqnum,b.length);
 		}
 		else if(b.ack == 2)
@@ -389,11 +391,10 @@ void retransmit()
 	data_packet * x;
     char charbuff[MSS];
     int i,n;
-    for(i = 0; i < ind; i++)
+    for(i = 0; i <= ind; i++)
     {
     	if(temp_buff[i].seqnum + temp_buff[i].length <= base + SWND)
 	    {
-	    	*x = temp_buff[i];
 	    	 x = (data_packet *)charbuff;
 	    	*x = temp_buff[i];
 	    	n = sendto(sockfd, charbuff, sizeof(temp_buff[i]),0,(struct sockaddr *)&client_serveraddr,sizeof(client_serveraddr));
@@ -403,18 +404,21 @@ void retransmit()
 	    else break;
     }
 
-    if(base + SWND < nextseqnum && i != ind + 1)  
+    if(base + SWND <= nextseqnum && i != ind + 1)  
     {
+    	printf("here\n");
     	data_packet d = create_packet(temp_buff[i].seqnum);
 	    x = (data_packet *)charbuff;
 	    *x = d;
 	    n = sendto(sockfd, charbuff, d.length + 16,0,(struct sockaddr *)&client_serveraddr,sizeof(client_serveraddr));
 	    if (n < 0) error("ERROR in sendto");
+	    printf("packet of size %d is sent\n",d.length);
 	    ackrecv = 0;
     }
 
-    while(nextseqnum <= base + SWND)
+    while(nextseqnum < base + SWND)
     {
+    	printf("here1\n");
     	data_packet d = create_packet(nextseqnum);
     	nextseqnum += d.length;
 	    x = (data_packet *)charbuff;
@@ -430,12 +434,16 @@ void retransmit()
 
 void * retransmission(void *unsused)
 {
-	while(alarm_status == 0);
-	retrans = 1;
-	update_window(0,0,0);
-	alarm(SLEEP_VAL);
-	retransmit();
-	retrans = 0;
+	while(1)
+	{
+		while(alarm_status == 0);
+		retrans = 1;
+		update_window(0,0,0);
+		alarm(SLEEP_VAL);
+		retransmit();
+		retrans = 0;
+		alarm_status = 0;
+	}
 	pthread_exit(0);
 }
 
@@ -532,6 +540,7 @@ void Recv_buffer_handler(data_packet d)
     	ac.seqnum = expectedseqnum - last_ack_length;
     	ac.length = last_ack_length;
     	ac.rwnd = RECEIVER_QUEUE_SIZE - ReceiverQueueIn; //////modify this!!!!
+    	printf("RWND %d\n",ac.rwnd);
     	acptr = (data_packet *)buff;
     	*acptr = ac;
     	int n = sendto(sockfd,buff,sizeof(ac),0,(struct sockaddr *)&server_clientaddr,sizeof(server_clientaddr));
@@ -540,7 +549,8 @@ void Recv_buffer_handler(data_packet d)
     }
 
 
-    if(d.seqnum == expectedseqnum)
+    else
+    // if(d.seqnum == expectedseqnum)
     {
     	
     	for(int x = 0; x < d.length; x++)
@@ -562,8 +572,15 @@ void Recv_buffer_handler(data_packet d)
     	printf("RWND %d\n",ac.rwnd); //////modify this!!!!
     	acptr = (data_packet *)buff;
     	*acptr = ac;
-    	int n = sendto(sockfd,buff,sizeof(ac),0,(struct sockaddr *)&server_clientaddr,sizeof(server_clientaddr));
-        if(n<0) error("ERROR writing in server3");
+    	if( !((drop_count == 3 && d.seqnum == 1010) || (drop_count == 2 && d.seqnum == 3028) || (drop_count == 2 && d.seqnum == 5043)) )
+        {
+            int n = sendto(sockfd,buff,sizeof(ac),0,(struct sockaddr *)&server_clientaddr,sizeof(server_clientaddr));
+            if(n<0) error("ERROR writing in server3");
+        }
+        else
+        {
+            drop_count --;
+        }
         printf("original Packet:%d received\n",d.seqnum);
         printf("expected seq num %d\n",expectedseqnum);
     }
