@@ -83,7 +83,7 @@ void setUser(struct in_addr IP,unsigned short int port,int f)
     int i;
     for(i = 0; i < MAX_CLIENTS; i++)
     {
-        if(ntohs(user_info[i].client.sin_addr.s_addr) == ntohs(IP.s_addr))
+        if((user_info[i].client.sin_addr.s_addr) == (IP.s_addr))
         {
             user_info[i].fd = f;
             user_info[i].client.sin_port = port;
@@ -136,13 +136,13 @@ int main(int argc, char **argv)
     /*
      * check command line arguments
      */
-    clientips[0] = "10.5.18.112";
+    clientips[0] = "10.145.134.5";
     clientports[0] = 9000;
-    client_names[0] = "theerdha";
+    client_names[0] = "achal";
 
-    clientips[1] = "10.5.18.109";
+    clientips[1] = "10.5.18.112";
     clientports[1] = 9000;
-    client_names[1] = "buridi1";
+    client_names[1] = "server112";
 
     clientips[2] = "10.5.18.66";
     clientports[2] = 9000;

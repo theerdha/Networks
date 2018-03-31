@@ -18,6 +18,7 @@
 #define ACKSIZE 64
 #define TIMEOUT 1
 #define MAX_WINDOW_SIZE 1000
+
 /* 
  * error - wrapper for perror
  */
@@ -93,6 +94,15 @@ int buffer_index(int seq)
     return -1;
 }
 
+// static int alarm_status = 0;
+// void mysig(int sig){
+//     pid_t pid;
+//     printf("PARENT : Received signal %d \n", sig);
+//     if (sig == SIGALRM){
+//         alarm_status = 1;
+//     }
+// }
+
 void sender_func(int start, int end, FILE* file,int chunk_buffer_count[])
 {
     int i = start;
@@ -106,7 +116,7 @@ void sender_func(int start, int end, FILE* file,int chunk_buffer_count[])
         
         if(chunk_buffer_count[i] == -1)
         {
-
+            bzero(buf,BUFSIZE);
             fread(buf+8,BUFSIZE-8,1,file);
             MD5_Update(&mdContext,buf+8,BUFSIZE-8);
             setSequenceNumber(buf,&seq);
@@ -118,16 +128,36 @@ void sender_func(int start, int end, FILE* file,int chunk_buffer_count[])
             
             //printf("window size :%d\n",WINDOW_SIZE);
         }
-        else
-        {
-            n = sendto(sockfd, chunk_buffer[buffer_index(i)].buf, BUFSIZE,0,(struct sockaddr *)&serveraddr,sizeof(serveraddr));
-            if (n < 0) error("ERROR in sendto1");
-            //printf("sent %d from buffer\n", i);
-            //WINDOW_SIZE /= 2;
-           // printf("window size :%d\n",WINDOW_SIZE);
-        }
+        // else
+        // {
+        //     n = sendto(sockfd, chunk_buffer[buffer_index(i)].buf, BUFSIZE,0,(struct sockaddr *)&serveraddr,sizeof(serveraddr));
+        //     if (n < 0) error("ERROR in sendto1");
+        //     //printf("sent %d from buffer\n", i);
+        //     //WINDOW_SIZE /= 2;
+        //    // printf("window size :%d\n",WINDOW_SIZE);
+        // }
         i ++;
 
+    }
+}
+
+void retransmit(int start, int end,int chunk_buffer_count[])
+{
+    int i = start;
+    int n;
+    char buf[BUFSIZE];
+    while(i <= end)
+    {   
+        if(chunk_buffer_count[i] != -1)
+        {
+            bzero(buf,BUFSIZE);   
+            n = sendto(sockfd, chunk_buffer[buffer_index(i)].buf, BUFSIZE,0,(struct sockaddr *)&serveraddr,sizeof(serveraddr));
+            if (n < 0) error("ERROR in sendto1");
+                //printf("sent %d from buffer\n", i);
+                //WINDOW_SIZE /= 2;
+               // printf("window size :%d\n",WINDOW_SIZE);
+        }
+        i++;
     }
 }
 
@@ -150,6 +180,8 @@ int main(int argc, char **argv) {
         fprintf(stderr,"usage: %s <hostname> <port> <filename>\n", argv[0]);
         exit(0);
     }
+
+    //(void) signal(SIGALRM,mysig);
 
     hostname = argv[1];
     portno = atoi(argv[2]);
@@ -237,15 +269,21 @@ int main(int argc, char **argv) {
             //printf("breake dhere\n");
             break;
         }
+
 		sender_func(startptr,endptr,file,chunk_buffer_count);
 		int count;
         int max = startptr - 1;
-        for(count = 0; count < endptr - startptr + 1; count++)
-        //for(count = 0; count < 1; count++)
+        //for(count = 0; count < endptr - startptr + 1; count++)
+        for(count = 0; count < 1; count++)
         {
             bzero(buf, BUFSIZE);
             n = recvfrom(sockfd, buf, BUFSIZE,0,(struct sockaddr *)&serveraddr,&serverlen);
-            if (n < 0) perror("timeout"); 
+            if (n < 0)
+            {
+              //perror("timeout");
+              if(WINDOW_SIZE > 3)WINDOW_SIZE/= 2;
+              retransmit(startptr,endptr,chunk_buffer_count);  
+            }  
             
             else
             {
@@ -253,11 +291,12 @@ int main(int argc, char **argv) {
                 printf("ack received for %d seq num\n",s);
                 if(s > max) max = s;
                 if(max == no_of_chunks)break;
+                if(WINDOW_SIZE * 2 < MAX_WINDOW_SIZE) WINDOW_SIZE *= 2;
             }
         }
          
-        if(max == endptr && WINDOW_SIZE * 2 < MAX_WINDOW_SIZE) WINDOW_SIZE *= 2;
-        else if(max != endptr && WINDOW_SIZE > 3)WINDOW_SIZE/= 2;
+        // if(max == endptr && WINDOW_SIZE * 2 < MAX_WINDOW_SIZE) WINDOW_SIZE *= 2;
+        // else if(max != endptr && WINDOW_SIZE > 3)WINDOW_SIZE/= 2;
 
         remove_from_buffer(max - startptr + 1);
         
@@ -274,7 +313,14 @@ int main(int argc, char **argv) {
         //printf("endptr is %d\n",endptr);
 		
     }
-    printf("\nFile sent in %d windows.\n",i);
+
+    printf("\nFile sent.\n");
+
+    bzero(buf,BUFSIZE);
+    setFinalSequenceNumber(buf);
+    setMessageSize(buf,strlen(buf));
+    n = sendto(sockfd, buf, BUFSIZE,0,(struct sockaddr *)&serveraddr,sizeof(serveraddr));
+    if (n < 0) error("ERROR in sendto");
      
     MD5_Final(checksum,&mdContext);
     checksum[MD5_DIGEST_LENGTH] = '\0';

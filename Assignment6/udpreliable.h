@@ -98,6 +98,10 @@ void setSequenceNumber(char* buf,int* index){
     *index = *index+1;
 }
 
+void setFinalSequenceNumber(char* buf){
+    inttostr(buf,0,-100);
+}
+
 void setMessageSize(char* buf,int size){
     inttostr(buf,4,size);
 }

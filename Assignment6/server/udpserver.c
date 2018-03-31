@@ -200,11 +200,14 @@ int main(int argc, char **argv) {
         MD5_Init(&mdContext);
         i = 0;
         
-        while(i < no_of_packets){
+        //while(i < no_of_packets){
+        while(1){
+
             bzero(buf,BUFSIZE);
             n = recvfrom(sockfd, buf, BUFSIZE,0,(struct sockaddr *)&clientaddr,&clientlen);
             if (n < 0) error("ERROR in recvfrom"); 
             seq = strtoint(buf,0);
+            if(seq == -100) break;
             printf("seq = %d\n", seq);
            
 
@@ -250,6 +253,27 @@ int main(int argc, char **argv) {
             }
 
         }
+
+        //final chunk case
+        // while(1)
+        // {
+        //     bzero(buf,BUFSIZE);
+        //     n = recvfrom(sockfd, buf, BUFSIZE,0,(struct sockaddr *)&clientaddr,&clientlen);
+        //     if (n < 0) error("ERROR in recvfrom"); 
+        //     seq = strtoint(buf,0);
+        //     // printf("seq = %d\n", seq);
+
+        //     if(seq == -100) break;
+        //     else
+        //     {
+        //         bzero(ack,ACKSIZE);
+        //         createdupACK(ack,expected_seqnumber - 1);
+        //         n = sendto(sockfd,ack,ACKSIZE,0,(struct sockaddr *)&clientaddr,sizeof(clientaddr));
+        //         if(n<0) error("ERROR writing in server4");
+        //         printf("duplicate packet:%d received\n",seq);
+        //     }
+        // }
+
         printf("Received file in %d chunks.\n",no_of_packets );
         
         fclose(fd);
